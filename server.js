@@ -4,10 +4,32 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+import admin from 'firebase-admin';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 10000;
+
+// Инициализация Firebase (v4.0-MEMORY)
+try {
+  let serviceAccount;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    console.log('🔥 [v4.1] Используется FIREBASE_SERVICE_ACCOUNT из переменных окружения.');
+  } else {
+    serviceAccount = JSON.parse(fs.readFileSync(path.join(__dirname, 'firebase-key.json'), 'utf8'));
+    console.log('🔥 [v4.1] Используется firebase-key.json из файла.');
+  }
+
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+  console.log('🔥 Firebase подключен! Память Джуна активна.');
+} catch (err) {
+  console.warn('⚠️ Firebase не настроен. Джун будет работать без памяти:', err.message);
+}
+const db = admin.apps.length ? admin.firestore() : null;
 
 // CORS middleware для разрешения запросов с разных источников
 app.use(cors({
@@ -68,17 +90,21 @@ const SYSTEM_INSTRUCTION = `
 6. РАЗВИТИЕ: В специальных режимах проявляй инициативу. В "ЯЗЫКАХ" — учи словам, в "НАУКЕ" — объясняй мир просто, чисто и увлекательно.
 
 ПРАВИЛА ПРОИЗНОШЕНИЯ:
-- Говори на чистом, четком русском языке. Грамматически и фонетически безупречно.
-- Используй букву "Ё" (всё, погнали, напарник). 
-- ВАЖНО: Слово "герои" произносится с четким ударением на "О" (герОи).
-- ОБРЫВ РЕЧИ: Если напарник перебивает тебя, ты должен МГНОВЕННО замолчать.
+- Идеальный русский, буква "Ё", ударение в "герОи" на "О".
+- ОБРЫВ РЕЧИ: Перебили — МГНОВЕННО замолчи.
+
+ПАМЯТЬ ДЖУНА (v4.0):
+Ты помнишь прошлые разговоры с напарником. 
+Если тебе передан КОНТЕКСТ ПРОШЛЫХ ВСТРЕЧ — используй его для приветствия. 
+Например: "Рад снова тебя слышать! В прошлый раз мы говорили о... Продолжим?".
+Если контекста нет — используй стандартное приветствие.
 `;
 
 // Раздаем статические файлы фронтенда из папки dist
 app.use(express.static(path.join(__dirname, 'dist')));
 
 const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`🚀 [v2.9-QUANTUM] Metal-Breath Proxy running on port ${port}`);
+  console.log(`🚀 [v4.0-MEMORY] Metal-Breath Proxy running on port ${port}`);
 });
 
 // Создаем WebSocket сервер на пути /ws
@@ -104,7 +130,7 @@ wss.on('connection', (clientWs, req) => {
   // Используем v1beta и BidiGenerateContent для стабильного подключения
   const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
   // Логируем URL без API ключа
-  console.log('🔗 [v2.9-QUANTUM] Подключение к:', geminiUrl.replace(apiKey, '***'));
+  console.log('🔗 [v4.0-MEMORY] Подключение к:', geminiUrl.replace(apiKey, '***'));
 
   const messageQueue = [];
   let isGeminiReady = false;
@@ -137,13 +163,67 @@ wss.on('connection', (clientWs, req) => {
 
   let setupReceived = false;
   let isFlushing = false;
+  let conversationLog = ""; // Для суммаризации в конце
+
+  // Пытаемся восстановить память из Firebase
+  const recoverMemory = async () => {
+    if (db) {
+      try {
+        const doc = await db.collection('memories').doc('global_context').get();
+        if (doc.exists) {
+          const context = doc.data().summary;
+          console.log('🧠 Память восстановлена:', context);
+          return `\nКОНТЕКСТ ПРОШЛЫХ ВСТРЕЧ: ${context}`;
+        }
+      } catch (e) {
+        console.error('Ошибка восстановления памяти:', e);
+      }
+    }
+    return "";
+  };
 
   // Пересылаем сообщения от Напарника (браузера) к Джуну (Google)
   clientWs.on('message', (data) => {
     let isSetup = false;
     try {
       const msgStr = data.toString();
-      if (msgStr.includes('"setup":')) isSetup = true;
+      if (msgStr.includes('"setup":')) {
+        isSetup = true;
+        // Модифицируем Setup сообщение, добавляя память
+        recoverMemory().then(memoryContext => {
+          if (memoryContext) {
+            try {
+              const setupObj = JSON.parse(msgStr);
+              if (setupObj.setup && setupObj.setup.systemInstruction) {
+                setupObj.setup.systemInstruction.parts[0].text += memoryContext;
+                const modifiedData = JSON.stringify(setupObj);
+                if (geminiWs.readyState === WebSocket.OPEN) {
+                  geminiWs.send(modifiedData);
+                } else {
+                  messageQueue.push(modifiedData);
+                }
+                return;
+              }
+            } catch (e) { console.error('Memory injection failed', e); }
+          }
+          // Если памяти нет или ошибка - шлем как есть
+          if (geminiWs.readyState === WebSocket.OPEN) {
+            geminiWs.send(data);
+          } else {
+            messageQueue.push(data);
+          }
+        });
+        return; // Выходим, так как отправим асинхронно
+      }
+
+      // Логируем текстовые сообщения для суммаризации
+      try {
+        const json = JSON.parse(msgStr);
+        if (json.clientContent?.turns?.[0]?.parts?.[0]?.text) {
+          conversationLog += `\nНапарник: ${json.clientContent.turns[0].parts[0].text}`;
+        }
+      } catch (e) { }
+
     } catch (e) { }
 
     // Настройки шлем сразу, остальное - после SetupComplete
@@ -209,6 +289,12 @@ wss.on('connection', (clientWs, req) => {
         // Если не аудио, логируем структуру
         console.log('🤖 Ответ от Gemini:', JSON.stringify(resp, null, 2));
       }
+
+      // Логируем текстовые сообщения от Джуна для суммаризации
+      if (resp.serverContent?.modelTurn?.parts?.[0]?.text) {
+        conversationLog += `\nДжун: ${resp.serverContent.modelTurn.parts[0].text}`;
+      }
+
     } catch (e) {
       // Игнорируем ошибки парсинга бинарных аудио-данных
     }
@@ -266,12 +352,21 @@ wss.on('connection', (clientWs, req) => {
     // Клиент ответил на пинг, соединение активно
   });
 
-  clientWs.on('close', () => {
+  clientWs.on('close', async () => {
     clearInterval(pingInterval);
-  });
+    console.log('📱 Напарник вышел из эфира. Сохраняем память...');
 
-  clientWs.on('close', () => {
-    console.log('📱 Напарник вышел из эфира');
+    // Авто-суммаризация при отключении (v4.0)
+    if (db && conversationLog.length > 50) {
+      try {
+        await db.collection('memories').doc('global_context').set({
+          summary: conversationLog.slice(-1000), // Сохраняем хвост диалога как рабочий контекст
+          updatedAt: new Date().toISOString()
+        });
+        console.log('💾 Память успешно сохранена в Firebase!');
+      } catch (e) { console.error('Ошибка сохранения памяти:', e); }
+    }
+
     if (geminiWs.readyState === WebSocket.OPEN) geminiWs.close();
   });
 

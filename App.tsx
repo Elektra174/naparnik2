@@ -52,18 +52,6 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
     const dataArray = new Uint8Array(bufferLength);
     let animationId: number;
 
-    const particles: { angle: number; r: number; size: number; alpha: number; speed: number }[] = [];
-    const numParticles = 80;
-    for (let i = 0; i < numParticles; i++) {
-      particles.push({
-        angle: (i / numParticles) * Math.PI * 2,
-        r: 65,
-        size: Math.random() * 3 + 1,
-        alpha: Math.random() * 0.5 + 0.2,
-        speed: Math.random() * 0.01 + 0.005
-      });
-    }
-
     const smoothedData = new Float32Array(32);
     let phase = 0;
 
@@ -82,7 +70,7 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
         smoothedData[i] += (avg - smoothedData[i]) * 0.15;
       }
 
-      // СОЗДАЕМ СИММЕТРИЮ: зеркалим данные для равномерного распределения
+      // СОЗДАЕМ СИММЕТРИЮ: зеркалим данные для равномерного распределения (64 полоски)
       const balancedData = new Float32Array(64);
       for (let i = 0; i < 32; i++) {
         balancedData[i] = smoothedData[i];
@@ -94,35 +82,43 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
       const centerY = canvas.height / 2;
       const baseRadius = 65;
 
-      phase += 0.01;
+      phase += 0.005; // Медленное вращение для жизни
 
-      // Рисуем центральное силовое кольцо (v2.9)
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(0, 242, 255, 0.4)`;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 3;
 
-      particles.forEach((p, i) => {
-        // Подвязываем частицу к ближайшей частоте (с учетом зеркальности)
-        const dataIdx = Math.floor((p.angle / (Math.PI * 2)) * 64) % 64;
-        const val = balancedData[dataIdx] || 0;
-
-        // Динамика частицы
-        p.angle += p.speed + (val * 0.0001); // Быстрее крутятся при звуке
-        const offset = (val / 255) * 50; // Улетают дальше при громкости
-        const x = centerX + Math.cos(p.angle) * (baseRadius + offset + Math.sin(phase + i) * 10);
-        const y = centerY + Math.sin(p.angle) * (baseRadius + offset + Math.sin(phase + i) * 10);
+      for (let i = 0; i < 64; i++) {
+        const val = (balancedData[i] / 255) * 60;
+        const angle = (i / 64) * Math.PI * 2 + phase;
 
         const hue = isUser ? 180 : (200 + val * 0.5);
-        ctx.fillStyle = `hsla(${hue}, 100%, 65%, ${p.alpha + (val / 255)})`;
-        ctx.shadowBlur = 10 + (val / 255) * 15;
-        ctx.shadowColor = `hsla(${hue}, 100%, 65%, 0.8)`;
+        const color = `hsla(${hue}, 100%, 60%, 0.8)`;
+
+        ctx.strokeStyle = color;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = color;
+
+        // Рисуем симметричную полоску (внутренний и внешний импульс)
+        const innerR = baseRadius - val * 0.3;
+        const outerR = baseRadius + val * 1.5;
+
+        const x1 = centerX + Math.cos(angle) * innerR;
+        const y1 = centerY + Math.sin(angle) * innerR;
+        const x2 = centerX + Math.cos(angle) * outerR;
+        const y2 = centerY + Math.sin(angle) * outerR;
 
         ctx.beginPath();
-        ctx.arc(x, y, p.size + (val / 255) * 4, 0, Math.PI * 2);
-        ctx.fill();
-      });
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+
+      // Центральный контур
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(0, 242, 255, 0.3)`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
     };
 
     draw();
