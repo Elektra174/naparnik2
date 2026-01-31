@@ -48,72 +48,68 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
     const dataArray = new Uint8Array(bufferLength);
     let animationId: number;
 
-    const smoothedData = new Float32Array(32);
+    const smoothedData = new Float32Array(64);
     let phase = 0;
 
     const draw = () => {
       animationId = requestAnimationFrame(draw);
       analyser.getByteFrequencyData(dataArray);
 
-      // Группируем данные для плавности
-      const step = Math.floor(dataArray.length / 32);
-      for (let i = 0; i < 32; i++) {
+      // Группируем данные (64 полоски для детализации)
+      const step = Math.floor(dataArray.length / 64);
+      for (let i = 0; i < 64; i++) {
         let sum = 0;
         for (let j = 0; j < step; j++) {
           sum += dataArray[i * step + j];
         }
         const avg = sum / step;
-        // Плавное приближение (Lerp)
-        smoothedData[i] += (avg - smoothedData[i]) * 0.2;
+        smoothedData[i] += (avg - smoothedData[i]) * 0.15; // Мягкое затухание
       }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
-      const baseRadius = 70;
+      const baseRadius = 65;
 
-      phase += 0.02; // Постоянное движение
+      phase += 0.01;
 
-      // Настройка смешивания для "свечения"
-      ctx.globalCompositeOperation = 'screen';
-      ctx.shadowBlur = 15;
+      // Настройка стиля линий
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 3;
 
-      const drawWave = (color: string, offset: number, scale: number) => {
-        ctx.beginPath();
-        ctx.fillStyle = color;
+      for (let i = 0; i < 64; i++) {
+        const val = (smoothedData[i] / 255) * 60;
+        const angle = (i / 64) * Math.PI * 2 + phase;
+
+        // Цвет зависит от громкости и выбранного стиля (Джун/Пользователь)
+        const hue = isUser ? 180 : (200 + val);
+        const color = `hsla(${hue}, 100%, 60%, 0.9)`;
+
+        ctx.strokeStyle = color;
+        ctx.shadowBlur = 15;
         ctx.shadowColor = color;
 
-        const points: { x: number; y: number }[] = [];
-        const numPoints = 32;
+        // Рисуем симметричную полоску (снаружи и внутри круга)
+        const innerR = baseRadius - val * 0.5;
+        const outerR = baseRadius + val * 1.5;
 
-        for (let i = 0; i < numPoints; i++) {
-          const angle = (i / numPoints) * Math.PI * 2;
-          const audioVal = (smoothedData[i] || 0) * scale;
-          const pulse = Math.sin(phase + i * 0.5 + offset) * 5;
-          const r = baseRadius + audioVal + pulse;
+        const x1 = centerX + Math.cos(angle) * innerR;
+        const y1 = centerY + Math.sin(angle) * innerR;
+        const x2 = centerX + Math.cos(angle) * outerR;
+        const y2 = centerY + Math.sin(angle) * outerR;
 
-          points.push({
-            x: centerX + Math.cos(angle) * r,
-            y: centerY + Math.sin(angle) * r
-          });
-        }
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
 
-        // Рисуем сглаженную кривую
-        ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 0; i < points.length; i++) {
-          const next = points[(i + 1) % points.length];
-          const midX = (points[i].x + next.x) / 2;
-          const midY = (points[i].y + next.y) / 2;
-          ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
-        }
-        ctx.closePath();
-        ctx.fill();
-      };
-
-      // Три слоя авроры: Бирюзовый, Индиго и Золотой
-      drawWave('rgba(0, 242, 255, 0.4)', 0, 0.4);
-      drawWave('rgba(79, 70, 229, 0.3)', Math.PI * 0.5, 0.5);
-      drawWave('rgba(251, 191, 36, 0.2)', Math.PI, 0.3);
+      // Добавляем центральный "силовой" круг
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(0, 242, 255, 0.2)`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
     };
 
     draw();
