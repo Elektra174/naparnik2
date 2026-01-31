@@ -309,7 +309,7 @@ export default function App() {
         // Отправляем setup сообщение для конфигурации Gemini API
         const setupMessage = {
           setup: {
-            model: "models/gemini-2.5-flash-native-audio-preview-09-2025",
+            model: "gemini-2.5-flash-native-audio-preview-09-2025",
             generationConfig: {
               responseModalities: ["audio"],
               speechConfig: {
