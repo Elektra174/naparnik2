@@ -431,7 +431,19 @@ export default function App() {
 
       socket.onmessage = async (event) => {
         const message = JSON.parse(event.data);
-        const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+
+        // Логируем не аудио сообщения для отладки
+        if (!message.serverContent?.modelTurn?.parts?.[0]?.inlineData && !message.server_content?.model_turn?.parts?.[0]?.inline_data) {
+          console.log('🤖 Пришло от Джуна:', message);
+        }
+
+        const serverContent = message.serverContent || message.server_content;
+        const modelTurn = serverContent?.modelTurn || serverContent?.model_turn;
+        const parts = modelTurn?.parts;
+        const firstPart = parts?.[0];
+        const inlineData = firstPart?.inlineData || firstPart?.inline_data;
+        const base64Audio = inlineData?.data;
+
         if (base64Audio) {
           setIsJunSpeaking(true);
           nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
@@ -448,8 +460,8 @@ export default function App() {
           sourcesRef.current.add(source);
         }
 
-        if (message.serverContent?.interrupted) stopAudio();
-        if (message.serverContent?.turnComplete) setUserIsSpeaking(false);
+        if (serverContent?.interrupted) stopAudio();
+        if (serverContent?.turnComplete || serverContent?.turn_complete) setUserIsSpeaking(false);
       };
 
       socket.onerror = (e) => {

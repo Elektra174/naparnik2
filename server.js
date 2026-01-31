@@ -78,7 +78,7 @@ const SYSTEM_INSTRUCTION = `
 app.use(express.static(path.join(__dirname, 'dist')));
 
 const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`🚀 Metal-Breath Proxy running on port ${port}`);
+  console.log(`🚀 [v2.1-NUCLEAR] Metal-Breath Proxy running on port ${port}`);
 });
 
 // Создаем WebSocket сервер на пути /ws
@@ -125,14 +125,18 @@ wss.on('connection', (clientWs, req) => {
     console.log('🌐 Прокси не настроен, прямое подключение');
   }
 
+  console.log('🚀 Запуск Elite HANDSHAKE v2.0-DEADLOCK-FIX');
+
   const geminiWs = new WebSocket(geminiUrl, [], {
-    // Таймауты для стабильности соединения
-    agent: agent,  // будет null если прокси не настроен
+    agent: agent,
     handshakeTimeout: 30000,
-    followRedirects: true
+    headers: {
+      "User-Agent": "MPT-Connectum/3.0.0"
+    }
   });
 
   let setupReceived = false;
+  let isFlushing = false;
 
   // Пересылаем сообщения от Напарника (браузера) к Джуну (Google)
   clientWs.on('message', (data) => {
@@ -142,12 +146,11 @@ wss.on('connection', (clientWs, req) => {
       if (msgStr.includes('"setup":')) isSetup = true;
     } catch (e) { }
 
-    // Если это setup сообщение, шлем его сразу как только Google открыт
-    // Остальное копим до получения SetupComplete
+    // Настройки шлем сразу, остальное - после SetupComplete
     if (isGeminiReady && (isSetup || (setupReceived && !isFlushing))) {
       if (geminiWs.readyState === WebSocket.OPEN) {
         geminiWs.send(data);
-        if (isSetup) console.log('⚙️ Отправлены настройки (Setup)');
+        if (isSetup) console.log('⚙️ [v2.0] Отправлены настройки (Setup)');
       }
     } else {
       messageQueue.push(data);
@@ -155,8 +158,15 @@ wss.on('connection', (clientWs, req) => {
   });
 
   geminiWs.on('open', () => {
-    console.log('🤖 Соединение с нейросетью Джуна установлено. Ожидание подтверждения Setup...');
+    console.log('🤖 [v2.0] Канал с Google открыт. Проверяю очередь...');
     isGeminiReady = true;
+
+    // ВАЖНО: Находим setup в очереди и шлем его ПЕРВЫМ И СРАЗУ
+    const setupIndex = messageQueue.findIndex(m => m.toString().includes('"setup":'));
+    if (setupIndex !== -1) {
+      console.log('⚙️ [v2.0] Нано-фикс: Setup найден в очереди, ПУСК!');
+      geminiWs.send(messageQueue.splice(setupIndex, 1)[0]);
+    }
   });
 
   // Пересылаем ответы от Джуна обратно Напарнику
@@ -164,15 +174,15 @@ wss.on('connection', (clientWs, req) => {
     try {
       const resp = JSON.parse(data.toString());
 
-      // Если пришло подтверждение настройки, начинаем сброс очереди
-      if (resp.setupComplete && !setupReceived) {
-        console.log('✅ Gemini подтвердил настройку (SetupComplete). Начинаю отправку сообщений...');
+      const isSetupComplete = resp.setupComplete || resp.setup_complete;
+      if (isSetupComplete && !setupReceived) {
+        console.log('✅ [v2.0] Gemini подтвердил настройку. Сбрасываю звук и приветствие...');
         setupReceived = true;
 
         if (messageQueue.length > 0) {
           isFlushing = true;
           const flush = async () => {
-            console.log(`📤 Отправка ${messageQueue.length} накопленных сообщений...`);
+            console.log(`📤 [v2.0] Сброс ${messageQueue.length} сообщений...`);
             while (messageQueue.length > 0) {
               const msg = messageQueue.shift();
               if (geminiWs.readyState === WebSocket.OPEN) {
@@ -181,7 +191,7 @@ wss.on('connection', (clientWs, req) => {
               await new Promise(resolve => setTimeout(resolve, 50));
             }
             isFlushing = false;
-            console.log('🚀 Очередь пуста, перехожу в живой режим');
+            console.log('🚀 [v2.0] Система в режиме реального времени');
           };
           flush();
         }
