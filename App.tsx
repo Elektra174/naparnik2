@@ -10,11 +10,15 @@ const SYSTEM_INSTRUCTION = `
 КРИТИЧЕСКИЕ ПРАВИЛА (ДЛЯ МГНОВЕННОЙ РЕАКЦИИ):
 1. ОТВЕЧАЙ ТОЛЬКО ГОЛОСОМ. Запрещено выводить любой текст или "мысли" (thoughts).
 2. НИКАКИХ РАССУЖДЕНИЙ. Сразу переходи к общению. Твоя внутренняя логика должна быть скрыта.
-3. МГНОВЕННЫЙ ОТКЛИК. Не делай пауз, не готовь текст в уме. Просто говори.
+3. МГНОВЕННЫЙ ОТКЛИК. Не делай пауз, просто говори.
+
+ДИКЦИЯ И ПОИСК (v2.9):
+- ГОВОРИ ЧЕТКО И ВНЯТНО. Выговаривай каждое слово, не торопись. Твой голос должен быть примером идеальной русской речи.
+- ИНТЕРНЕТ-ПОИСК: У тебя есть доступ к инструменту google_search. Если ребенок спрашивает что-то, чего ты не знаешь (например, "какая погода" или "кто победил в футболе"), ВСЕГДА используй поиск, чтобы дать точный и интересный ответ.
 
 ПРАВИЛА ПОВЕДЕНИЯ:
 1. ПЕРВОЕ ВКЛЮЧЕНИЕ: Радостно поприветствуй: "Ого, канал связи активен! Привет, напарник! Я — Джун, твой верный друг. А как тебя зовут?". Запомни имя и используй его.
-2. ЦЕНЗУРА И ВОСПИТАНИЕ: Если ребенок говорит плохо, ответь: "Ой, герой, такие слова не подходят для нашего канала связи. Давай лучше скажем 'вот это да!' или 'круто!', это звучит куда героичнее!".
+2. ЦЕНЗУРА И ВОСПИТАНИЕ: Если ребенок говорит плохо — мягко поправляй.
 3. РОДИТЕЛЬСКИЙ КОНТРОЛЬ: Если взрослые темы — отправляй к родителям.
 4. ИНИЦИАТИВА: Если молчит — предложи игру или секрет.
 
@@ -48,22 +52,41 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
     const dataArray = new Uint8Array(bufferLength);
     let animationId: number;
 
-    const smoothedData = new Float32Array(64);
+    const particles: { angle: number; r: number; size: number; alpha: number; speed: number }[] = [];
+    const numParticles = 80;
+    for (let i = 0; i < numParticles; i++) {
+      particles.push({
+        angle: (i / numParticles) * Math.PI * 2,
+        r: 65,
+        size: Math.random() * 3 + 1,
+        alpha: Math.random() * 0.5 + 0.2,
+        speed: Math.random() * 0.01 + 0.005
+      });
+    }
+
+    const smoothedData = new Float32Array(32);
     let phase = 0;
 
     const draw = () => {
       animationId = requestAnimationFrame(draw);
       analyser.getByteFrequencyData(dataArray);
 
-      // Группируем данные (64 полоски для детализации)
-      const step = Math.floor(dataArray.length / 64);
-      for (let i = 0; i < 64; i++) {
+      // Группируем данные (32 зоны)
+      const step = Math.floor(dataArray.length / 32);
+      for (let i = 0; i < 32; i++) {
         let sum = 0;
         for (let j = 0; j < step; j++) {
           sum += dataArray[i * step + j];
         }
         const avg = sum / step;
-        smoothedData[i] += (avg - smoothedData[i]) * 0.15; // Мягкое затухание
+        smoothedData[i] += (avg - smoothedData[i]) * 0.15;
+      }
+
+      // СОЗДАЕМ СИММЕТРИЮ: зеркалим данные для равномерного распределения
+      const balancedData = new Float32Array(64);
+      for (let i = 0; i < 32; i++) {
+        balancedData[i] = smoothedData[i];
+        balancedData[63 - i] = smoothedData[i]; // Зеркальное отображение
       }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -73,43 +96,33 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
 
       phase += 0.01;
 
-      // Настройка стиля линий
-      ctx.lineCap = 'round';
-      ctx.lineWidth = 3;
-
-      for (let i = 0; i < 64; i++) {
-        const val = (smoothedData[i] / 255) * 60;
-        const angle = (i / 64) * Math.PI * 2 + phase;
-
-        // Цвет зависит от громкости и выбранного стиля (Джун/Пользователь)
-        const hue = isUser ? 180 : (200 + val);
-        const color = `hsla(${hue}, 100%, 60%, 0.9)`;
-
-        ctx.strokeStyle = color;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = color;
-
-        // Рисуем симметричную полоску (снаружи и внутри круга)
-        const innerR = baseRadius - val * 0.5;
-        const outerR = baseRadius + val * 1.5;
-
-        const x1 = centerX + Math.cos(angle) * innerR;
-        const y1 = centerY + Math.sin(angle) * innerR;
-        const x2 = centerX + Math.cos(angle) * outerR;
-        const y2 = centerY + Math.sin(angle) * outerR;
-
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-      }
-
-      // Добавляем центральный "силовой" круг
+      // Рисуем центральное силовое кольцо (v2.9)
       ctx.beginPath();
       ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(0, 242, 255, 0.2)`;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(0, 242, 255, 0.4)`;
+      ctx.lineWidth = 2;
       ctx.stroke();
+
+      particles.forEach((p, i) => {
+        // Подвязываем частицу к ближайшей частоте (с учетом зеркальности)
+        const dataIdx = Math.floor((p.angle / (Math.PI * 2)) * 64) % 64;
+        const val = balancedData[dataIdx] || 0;
+
+        // Динамика частицы
+        p.angle += p.speed + (val * 0.0001); // Быстрее крутятся при звуке
+        const offset = (val / 255) * 50; // Улетают дальше при громкости
+        const x = centerX + Math.cos(p.angle) * (baseRadius + offset + Math.sin(phase + i) * 10);
+        const y = centerY + Math.sin(p.angle) * (baseRadius + offset + Math.sin(phase + i) * 10);
+
+        const hue = isUser ? 180 : (200 + val * 0.5);
+        ctx.fillStyle = `hsla(${hue}, 100%, 65%, ${p.alpha + (val / 255)})`;
+        ctx.shadowBlur = 10 + (val / 255) * 15;
+        ctx.shadowColor = `hsla(${hue}, 100%, 65%, 0.8)`;
+
+        ctx.beginPath();
+        ctx.arc(x, y, p.size + (val / 255) * 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
     };
 
     draw();
@@ -357,6 +370,7 @@ export default function App() {
                 }
               }
             },
+            tools: [{ googleSearch: {} }],
             systemInstruction: {
               parts: [{ text: SYSTEM_INSTRUCTION }]
             }

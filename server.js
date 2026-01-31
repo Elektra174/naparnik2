@@ -78,7 +78,7 @@ const SYSTEM_INSTRUCTION = `
 app.use(express.static(path.join(__dirname, 'dist')));
 
 const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`🚀 [v2.8-STUDIO] Metal-Breath Proxy running on port ${port}`);
+  console.log(`🚀 [v2.9-QUANTUM] Metal-Breath Proxy running on port ${port}`);
 });
 
 // Создаем WebSocket сервер на пути /ws
@@ -104,7 +104,7 @@ wss.on('connection', (clientWs, req) => {
   // Используем v1beta и BidiGenerateContent для стабильного подключения
   const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
   // Логируем URL без API ключа
-  console.log('🔗 [v2.8-STUDIO] Подключение к:', geminiUrl.replace(apiKey, '***'));
+  console.log('🔗 [v2.9-QUANTUM] Подключение к:', geminiUrl.replace(apiKey, '***'));
 
   const messageQueue = [];
   let isGeminiReady = false;
