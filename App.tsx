@@ -314,7 +314,7 @@ export default function App() {
         // Отправляем setup сообщение для конфигурации Gemini API
         const setupMessage = {
           setup: {
-            model: "gemini-2.0-flash-exp", // Using 2.0-flash-exp for broader compatibility, or keep user's if sure
+            model: "models/gemini-2.0-flash-exp",
             generation_config: {
               response_modalities: ["audio"],
               speech_config: {
@@ -336,7 +336,12 @@ export default function App() {
         const welcomePrompt = initialPrompt || "Привет, Джун! Давай знакомиться!";
         socket.send(JSON.stringify({
           client_content: {
-            turns: [{ parts: [{ text: welcomePrompt }] }],
+            turns: [
+              {
+                role: "user",
+                parts: [{ text: welcomePrompt }]
+              }
+            ],
             turn_complete: true
           }
         }));
@@ -486,7 +491,12 @@ export default function App() {
       stopAudio();
       socketRef.current.send(JSON.stringify({
         client_content: {
-          turns: [{ parts: [{ text: prompt }] }],
+          turns: [
+            {
+              role: "user",
+              parts: [{ text: prompt }]
+            }
+          ],
           turn_complete: true
         }
       }));
