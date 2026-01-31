@@ -48,38 +48,72 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
     const dataArray = new Uint8Array(bufferLength);
     let animationId: number;
 
+    const smoothedData = new Float32Array(32);
+    let phase = 0;
+
     const draw = () => {
       animationId = requestAnimationFrame(draw);
       analyser.getByteFrequencyData(dataArray);
 
+      // Группируем данные для плавности
+      const step = Math.floor(dataArray.length / 32);
+      for (let i = 0; i < 32; i++) {
+        let sum = 0;
+        for (let j = 0; j < step; j++) {
+          sum += dataArray[i * step + j];
+        }
+        const avg = sum / step;
+        // Плавное приближение (Lerp)
+        smoothedData[i] += (avg - smoothedData[i]) * 0.2;
+      }
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
-      const radius = 60;
+      const baseRadius = 70;
 
-      hueRef.current = (hueRef.current + 1) % 360;
-      const color = isUser ? `hsla(180, 100%, 50%, 0.8)` : `hsla(${hueRef.current}, 100%, 60%, 0.9)`;
+      phase += 0.02; // Постоянное движение
 
-      ctx.beginPath();
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = color;
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = color;
+      // Настройка смешивания для "свечения"
+      ctx.globalCompositeOperation = 'screen';
+      ctx.shadowBlur = 15;
 
-      for (let i = 0; i < bufferLength; i += 2) {
-        const val = dataArray[i] / 255;
-        const barHeight = val * 70;
-        const angle = (i / bufferLength) * Math.PI * 2;
+      const drawWave = (color: string, offset: number, scale: number) => {
+        ctx.beginPath();
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
 
-        const x1 = centerX + Math.cos(angle) * radius;
-        const y1 = centerY + Math.sin(angle) * radius;
-        const x2 = centerX + Math.cos(angle) * (radius + barHeight);
-        const y2 = centerY + Math.sin(angle) * (radius + barHeight);
+        const points: { x: number; y: number }[] = [];
+        const numPoints = 32;
 
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-      }
-      ctx.stroke();
+        for (let i = 0; i < numPoints; i++) {
+          const angle = (i / numPoints) * Math.PI * 2;
+          const audioVal = (smoothedData[i] || 0) * scale;
+          const pulse = Math.sin(phase + i * 0.5 + offset) * 5;
+          const r = baseRadius + audioVal + pulse;
+
+          points.push({
+            x: centerX + Math.cos(angle) * r,
+            y: centerY + Math.sin(angle) * r
+          });
+        }
+
+        // Рисуем сглаженную кривую
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 0; i < points.length; i++) {
+          const next = points[(i + 1) % points.length];
+          const midX = (points[i].x + next.x) / 2;
+          const midY = (points[i].y + next.y) / 2;
+          ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        ctx.closePath();
+        ctx.fill();
+      };
+
+      // Три слоя авроры: Бирюзовый, Индиго и Золотой
+      drawWave('rgba(0, 242, 255, 0.4)', 0, 0.4);
+      drawWave('rgba(79, 70, 229, 0.3)', Math.PI * 0.5, 0.5);
+      drawWave('rgba(251, 191, 36, 0.2)', Math.PI, 0.3);
     };
 
     draw();
