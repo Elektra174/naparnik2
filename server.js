@@ -42,7 +42,8 @@ app.get('/health', async (req, res) => {
     });
 
     clearTimeout(timeoutId);
-    status.google_api_reachable = response.ok ? 'success' : `failed (status: ${response.status})`;
+    // 404 - это нормально для корня API, главное что ответ получен от сервера Google
+    status.google_api_reachable = (response.ok || response.status === 404) ? 'success' : `failed (status: ${response.status})`;
   } catch (err) {
     status.google_api_reachable = `failed: ${err.message}`;
   }

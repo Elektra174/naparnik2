@@ -396,7 +396,12 @@ export default function App() {
                 const pcmBlob = createPcmBlob(downsampled);
 
                 socket.send(JSON.stringify({
-                  realtimeInput: { media: { data: pcmBlob.data, mimeType: pcmBlob.mimeType } }
+                  realtime_input: {
+                    media_chunks: [{
+                      data: pcmBlob.data,
+                      mime_type: pcmBlob.mimeType
+                    }]
+                  }
                 }));
               }
             };
