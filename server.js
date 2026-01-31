@@ -78,7 +78,7 @@ const SYSTEM_INSTRUCTION = `
 app.use(express.static(path.join(__dirname, 'dist')));
 
 const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`🚀 [v2.4-UNLIMITED] Metal-Breath Proxy running on port ${port}`);
+  console.log(`🚀 [v2.6-INSTANT] Metal-Breath Proxy running on port ${port}`);
 });
 
 // Создаем WebSocket сервер на пути /ws
@@ -104,7 +104,7 @@ wss.on('connection', (clientWs, req) => {
   // Используем v1beta и BidiGenerateContent для стабильного подключения
   const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
   // Логируем URL без API ключа
-  console.log('🔗 [v2.4-UNLIMITED] Подключение к:', geminiUrl.replace(apiKey, '***'));
+  console.log('🔗 [v2.6-INSTANT] Подключение к:', geminiUrl.replace(apiKey, '***'));
 
   const messageQueue = [];
   let isGeminiReady = false;
@@ -188,7 +188,8 @@ wss.on('connection', (clientWs, req) => {
               if (geminiWs.readyState === WebSocket.OPEN) {
                 geminiWs.send(msg);
               }
-              await new Promise(resolve => setTimeout(resolve, 50));
+              // Убрали задержку для INSTANT режима
+              // await new Promise(resolve => setTimeout(resolve, 50));
             }
             isFlushing = false;
             console.log('🚀 [v2.0] Система в режиме реального времени');
