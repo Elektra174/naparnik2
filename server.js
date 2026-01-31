@@ -104,7 +104,7 @@ const SYSTEM_INSTRUCTION = `
 app.use(express.static(path.join(__dirname, 'dist')));
 
 const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`🚀 [v4.0-MEMORY] Metal-Breath Proxy running on port ${port}`);
+  console.log(`🚀 [v4.2-FINAL] Metal-Breath Proxy running on port ${port}`);
 });
 
 // Создаем WebSocket сервер на пути /ws
@@ -117,8 +117,8 @@ const wss = new WebSocketServer({
 });
 
 wss.on('connection', (clientWs, req) => {
-  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-  console.log(`📱 Напарник подключился к каналу связи (IP: ${clientIp})`);
+  const clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
+  console.log(`📱 Напарник подключился (IP: ${clientIp})`);
 
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
@@ -130,7 +130,7 @@ wss.on('connection', (clientWs, req) => {
   // Используем v1beta и BidiGenerateContent для стабильного подключения
   const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
   // Логируем URL без API ключа
-  console.log('🔗 [v4.0-MEMORY] Подключение к:', geminiUrl.replace(apiKey, '***'));
+  console.log('🔗 [v4.2-FINAL] Подключение к:', geminiUrl.replace(apiKey, '***'));
 
   const messageQueue = [];
   let isGeminiReady = false;
@@ -172,11 +172,14 @@ wss.on('connection', (clientWs, req) => {
         const doc = await db.collection('memories').doc('global_context').get();
         if (doc.exists) {
           const context = doc.data().summary;
-          console.log('🧠 Память восстановлена:', context);
+          console.log('🧠 Память успешно восстановлена.');
           return `\nКОНТЕКСТ ПРОШЛЫХ ВСТРЕЧ: ${context}`;
         }
       } catch (e) {
-        console.error('Ошибка восстановления памяти:', e);
+        // Не логируем ошибку 5 (NOT_FOUND) — это нормально для первого запуска
+        if (!e.message.includes('5 NOT_FOUND')) {
+          console.error('Ошибка восстановления памяти:', e.message);
+        }
       }
     }
     return "";

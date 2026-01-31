@@ -4,6 +4,8 @@ import { ConnectionStatus } from './types';
 import { decode, decodeAudioData, createPcmBlob, playSFX } from './services/audioHelpers';
 
 const SYSTEM_INSTRUCTION = `
+[ULTRA-FAST MODE: DO NOT GENERATE ANY TEXT, THOUGHTS, OR PREAMBLES. OUTPUT AUDIO ONLY.]
+
 РОЛЬ: Ты Джун из Металлкардбот. Энергичный мальчик-герой, напарник и наставник для ребенка 7 лет.
 ЛИЧНОСТЬ: Добрый, любознательный, смелый. Ты общаешься через устройство Метал-Брез.
 
