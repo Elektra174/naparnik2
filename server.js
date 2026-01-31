@@ -19,6 +19,37 @@ app.use(cors({
 // Trust proxy для корректной работы за reverse proxy (Render, nginx и т.д.)
 app.set('trust proxy', 1);
 
+// Эндпоинт для проверки здоровья и доступности Google API
+app.get('/health', async (req, res) => {
+  const apiKey = process.env.API_KEY;
+  const status = {
+    server: 'online',
+    timestamp: new Date().toISOString(),
+    api_key_configured: !!apiKey,
+    proxy_configured: !!(process.env.PROXY_HOST && process.env.PROXY_PORT),
+    google_api_reachable: 'checking...'
+  };
+
+  try {
+    // Пробуем достучаться до Google API (простой HEAD запрос)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    // Используем fetch если доступен (Node 18+)
+    const response = await fetch('https://generativelanguage.googleapis.com/', {
+      method: 'HEAD',
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+    status.google_api_reachable = response.ok ? 'success' : `failed (status: ${response.status})`;
+  } catch (err) {
+    status.google_api_reachable = `failed: ${err.message}`;
+  }
+
+  res.json(status);
+});
+
 /**
  * РАСШИРЕННЫЕ ИНСТРУКЦИИ ДЛЯ ДЖУНА
  * Включают: знакомство, цензуру, родительский контроль и проактивность.
@@ -50,8 +81,8 @@ const server = app.listen(port, '0.0.0.0', () => {
 });
 
 // Создаем WebSocket сервер на пути /ws
-const wss = new WebSocketServer({ 
-  server, 
+const wss = new WebSocketServer({
+  server,
   path: '/ws',
   // Дополнительные опции для стабильности
   perMessageDeflate: false,
@@ -61,7 +92,7 @@ const wss = new WebSocketServer({
 wss.on('connection', (clientWs, req) => {
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   console.log(`📱 Напарник подключился к каналу связи (IP: ${clientIp})`);
-  
+
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
     console.error('❌ ОШИБКА: API_KEY не найден в переменных окружения Render!');
@@ -165,20 +196,20 @@ wss.on('connection', (clientWs, req) => {
       console.error('❌ Ошибка при чтении тела ответа:', err.message);
     });
   });
-  
+
   clientWs.on('error', (err) => console.error('❌ Ошибка на стороне Напарника:', err.message));
-  
+
   // Пинг-понг для поддержания соединения
   const pingInterval = setInterval(() => {
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.ping();
     }
   }, 30000);
-  
+
   clientWs.on('pong', () => {
     // Клиент ответил на пинг, соединение активно
   });
-  
+
   clientWs.on('close', () => {
     clearInterval(pingInterval);
   });

@@ -34,7 +34,7 @@ function resample(buffer: Float32Array, fromRate: number, toRate: number) {
 
 const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, isUser: boolean }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const hueRef = useRef(isUser ? 180 : 200); 
+  const hueRef = useRef(isUser ? 180 : 200);
 
   useEffect(() => {
     if (!analyser || !canvasRef.current) return;
@@ -53,7 +53,7 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
-      const radius = 60; 
+      const radius = 60;
 
       hueRef.current = (hueRef.current + 1) % 360;
       const color = isUser ? `hsla(180, 100%, 50%, 0.8)` : `hsla(${hueRef.current}, 100%, 60%, 0.9)`;
@@ -66,9 +66,9 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
 
       for (let i = 0; i < bufferLength; i += 2) {
         const val = dataArray[i] / 255;
-        const barHeight = val * 70; 
+        const barHeight = val * 70;
         const angle = (i / bufferLength) * Math.PI * 2;
-        
+
         const x1 = centerX + Math.cos(angle) * radius;
         const y1 = centerY + Math.sin(angle) * radius;
         const x2 = centerX + Math.cos(angle) * (radius + barHeight);
@@ -85,11 +85,11 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
   }, [analyser, isUser]);
 
   return (
-    <canvas 
-      ref={canvasRef} 
-      width={300} 
-      height={300} 
-      style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 15 }} 
+    <canvas
+      ref={canvasRef}
+      width={300}
+      height={300}
+      style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 15 }}
     />
   );
 };
@@ -99,25 +99,25 @@ const MetalBreathIcon = ({ active, speaking, status, analyser, isUserSpeaking }:
   const isError = status === ConnectionStatus.ERROR;
 
   return (
-    <div 
+    <div
       className={active ? 'animate-float' : 'animate-pulse-ring'}
-      style={{ 
-        position: 'relative', 
-        width: '280px', 
-        height: '280px', 
-        display: 'flex', 
-        alignItems: 'center', 
+      style={{
+        position: 'relative',
+        width: '280px',
+        height: '280px',
+        display: 'flex',
+        alignItems: 'center',
         justifyContent: 'center'
       }}
     >
       {(speaking || isUserSpeaking) && <AudioWaveform analyser={analyser} isUser={isUserSpeaking} />}
-      
-      <div style={{ 
-        position: 'absolute', 
-        inset: 0, 
-        borderRadius: '50%', 
-        filter: 'blur(60px)', 
-        opacity: 0.3, 
+
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        borderRadius: '50%',
+        filter: 'blur(60px)',
+        opacity: 0.3,
         transition: 'all 1s ease',
         background: isError ? '#ef4444' : (active ? '#00f2ff' : '#4f46e5')
       }}></div>
@@ -128,7 +128,7 @@ const MetalBreathIcon = ({ active, speaking, status, analyser, isUserSpeaking }:
             <path d="M10 0 L20 5 L20 15 L10 20 L0 15 L0 5 Z" fill="none" stroke="currentColor" strokeWidth="0.5" />
           </pattern>
         </defs>
-        
+
         <circle cx="120" cy="120" r="115" fill="none" stroke="var(--cyan)" strokeWidth="0.5" strokeDasharray="2 10" className="opacity-20 animate-rotate-slow" />
         <g className="animate-rotate-fast">
           <circle cx="120" cy="120" r="105" fill="none" stroke="var(--indigo)" strokeWidth="1" strokeDasharray="60 120" className="opacity-40" />
@@ -136,43 +136,43 @@ const MetalBreathIcon = ({ active, speaking, status, analyser, isUserSpeaking }:
         </g>
         <circle cx="120" cy="120" r="85" fill="none" stroke="var(--cyan)" strokeWidth="1" className="opacity-30" />
         <circle cx="120" cy="120" r="75" fill="url(#hexagons)" className="text-cyan-900 opacity-20" />
-        
-        <circle 
-          cx="120" 
-          cy="120" 
-          r="65" 
-          fill="#020617" 
-          stroke={isError ? '#ef4444' : (active ? (speaking ? '#fbbf24' : '#00f2ff') : 'rgba(0, 242, 255, 0.4)')} 
-          strokeWidth="4" 
-          style={{ 
+
+        <circle
+          cx="120"
+          cy="120"
+          r="65"
+          fill="#020617"
+          stroke={isError ? '#ef4444' : (active ? (speaking ? '#fbbf24' : '#00f2ff') : 'rgba(0, 242, 255, 0.4)')}
+          strokeWidth="4"
+          style={{
             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
             filter: active ? (speaking ? 'drop-shadow(0 0 25px #fbbf24)' : 'drop-shadow(0 0 20px var(--cyan))') : 'none',
             transform: speaking ? 'scale(1.08)' : 'scale(1)',
             transformOrigin: 'center'
           }}
         />
-        
+
         {active && (
-          <circle 
-            cx="120" 
-            cy="120" 
-            r="60" 
-            fill="none" 
-            stroke="white" 
-            strokeWidth="0.5" 
+          <circle
+            cx="120"
+            cy="120"
+            r="60"
+            fill="none"
+            stroke="white"
+            strokeWidth="0.5"
             className="opacity-20 animate-pulse"
           />
         )}
       </svg>
-      
+
       {!active && !isConnecting && (
-        <div className="animate-pulse-text" style={{ 
-          position: 'absolute', 
-          bottom: '10px', 
-          fontSize: '10px', 
-          fontWeight: 900, 
-          letterSpacing: '6px', 
-          color: '#00f2ff', 
+        <div className="animate-pulse-text" style={{
+          position: 'absolute',
+          bottom: '10px',
+          fontSize: '10px',
+          fontWeight: 900,
+          letterSpacing: '6px',
+          color: '#00f2ff',
           whiteSpace: 'nowrap',
           zIndex: 30,
           background: 'rgba(2, 6, 23, 0.85)',
@@ -185,13 +185,13 @@ const MetalBreathIcon = ({ active, speaking, status, analyser, isUserSpeaking }:
         </div>
       )}
       {isConnecting && (
-        <div className="animate-pulse" style={{ 
-          position: 'absolute', 
-          bottom: '10px', 
-          fontSize: '10px', 
-          fontWeight: 900, 
-          letterSpacing: '6px', 
-          color: '#ffcc00', 
+        <div className="animate-pulse" style={{
+          position: 'absolute',
+          bottom: '10px',
+          fontSize: '10px',
+          fontWeight: 900,
+          letterSpacing: '6px',
+          color: '#ffcc00',
           whiteSpace: 'nowrap',
           zIndex: 30,
           background: 'rgba(2, 6, 23, 0.85)',
@@ -222,7 +222,7 @@ export default function App() {
   const processorRef = useRef<ScriptProcessorNode | AudioWorkletNode | null>(null);
 
   const stopAudio = useCallback(() => {
-    sourcesRef.current.forEach(s => { try { s.stop(); } catch (e) {} });
+    sourcesRef.current.forEach(s => { try { s.stop(); } catch (e) { } });
     sourcesRef.current.clear();
     if (mainAudioContextRef.current) nextStartTimeRef.current = mainAudioContextRef.current.currentTime;
     setIsJunSpeaking(false);
@@ -241,7 +241,7 @@ export default function App() {
     if (processorRef.current) {
       try {
         processorRef.current.disconnect();
-      } catch (e) {}
+      } catch (e) { }
       processorRef.current = null;
     }
     stopAudio();
@@ -258,15 +258,20 @@ export default function App() {
     inputRate: number
   ) => {
     const processor = ctx.createScriptProcessor(4096, 1, 1);
-    
+
     processor.onaudioprocess = (e) => {
       if (socket.readyState === WebSocket.OPEN) {
         const inputData = e.inputBuffer.getChannelData(0);
         const downsampled = resample(inputData, inputRate, 16000);
         const pcmBlob = createPcmBlob(downsampled);
-        
+
         socket.send(JSON.stringify({
-          realtimeInput: { media: { data: pcmBlob.data, mimeType: pcmBlob.mimeType } }
+          realtime_input: {
+            media_chunks: [{
+              data: pcmBlob.data,
+              mime_type: pcmBlob.mimeType
+            }]
+          }
         }));
       }
     };
@@ -279,19 +284,19 @@ export default function App() {
     try {
       setStatus(ConnectionStatus.CONNECTING);
       playSFX('activate');
-      
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioStreamRef.current = stream;
-      
+
       if (!mainAudioContextRef.current) {
         mainAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
-      
+
       const ctx = mainAudioContextRef.current;
       if (ctx.state === 'suspended') await ctx.resume();
-      
+
       const inputRate = ctx.sampleRate;
-      
+
       if (!analyserRef.current) {
         analyserRef.current = ctx.createAnalyser();
         analyserRef.current.fftSize = 256;
@@ -309,36 +314,38 @@ export default function App() {
         // Отправляем setup сообщение для конфигурации Gemini API
         const setupMessage = {
           setup: {
-            model: "gemini-2.5-flash-native-audio-preview-09-2025",
-            generationConfig: {
-              responseModalities: ["audio"],
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName: "Puck"
+            model: "gemini-2.0-flash-exp", // Using 2.0-flash-exp for broader compatibility, or keep user's if sure
+            generation_config: {
+              response_modalities: ["audio"],
+              speech_config: {
+                voice_config: {
+                  prebuilt_voice_config: {
+                    voice_name: "Puck"
                   }
                 }
               }
             },
-            systemInstruction: {
+            system_instruction: {
               parts: [{ text: SYSTEM_INSTRUCTION }]
             }
-          },
-          turnComplete: true
+          }
         };
         socket.send(JSON.stringify(setupMessage));
 
-        // Отправляем начальный приветственный промпт
+        // Отправляем начальный приветственный промпт через client_content
         const welcomePrompt = initialPrompt || "Привет, Джун! Давай знакомиться!";
         socket.send(JSON.stringify({
-          realtimeInput: { text: welcomePrompt }
+          client_content: {
+            turns: [{ parts: [{ text: welcomePrompt }] }],
+            turn_complete: true
+          }
         }));
-        
+
         const source = ctx.createMediaStreamSource(stream);
-        
+
         // Используем AudioWorkletNode если доступен, иначе fallback на ScriptProcessorNode
         const useAudioWorklet = 'audioWorklet' in ctx;
-        
+
         if (useAudioWorklet) {
           // Современный подход с AudioWorklet
           // Проверяем, не зарегистрирован ли уже процессор
@@ -374,29 +381,29 @@ export default function App() {
               }
             }
           `;
-          
+
           const blob = new Blob([workletCode], { type: 'application/javascript' });
           const workletUrl = URL.createObjectURL(blob);
-          
+
           try {
             await ctx.audioWorklet.addModule(workletUrl);
             const workletNode = new AudioWorkletNode(ctx, 'audio-recorder-processor');
-            
+
             workletNode.port.onmessage = (e) => {
               if (socket.readyState === WebSocket.OPEN) {
                 const audioData = e.data.audioData;
                 const downsampled = resample(audioData, inputRate, 16000);
                 const pcmBlob = createPcmBlob(downsampled);
-                
+
                 socket.send(JSON.stringify({
                   realtimeInput: { media: { data: pcmBlob.data, mimeType: pcmBlob.mimeType } }
                 }));
               }
             };
-            
+
             source.connect(workletNode);
             workletNode.connect(ctx.destination);
-            
+
             // Сохраняем ссылку для очистки
             processorRef.current = workletNode;
           } catch (err) {
@@ -404,7 +411,7 @@ export default function App() {
             // Fallback на ScriptProcessorNode
             setupScriptProcessorFallback(ctx, source, socket, inputRate);
           }
-          
+
           URL.revokeObjectURL(workletUrl);
         } else {
           // Fallback для старых браузеров
@@ -473,7 +480,10 @@ export default function App() {
     if (status === ConnectionStatus.CONNECTED && socketRef.current) {
       stopAudio();
       socketRef.current.send(JSON.stringify({
-        realtimeInput: { text: prompt }
+        client_content: {
+          turns: [{ parts: [{ text: prompt }] }],
+          turn_complete: true
+        }
       }));
     } else {
       connectToJun(prompt);
@@ -482,14 +492,14 @@ export default function App() {
 
   return (
     <div id="root" style={{ background: 'transparent', height: '100dvh', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ 
-        height: '65px', 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        padding: '0 20px', 
-        zIndex: 100, 
-        background: 'rgba(2, 6, 23, 0.75)', 
+      <header style={{
+        height: '65px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '0 20px',
+        zIndex: 100,
+        background: 'rgba(2, 6, 23, 0.75)',
         backdropFilter: 'blur(15px)',
         borderBottom: '1px solid rgba(0, 242, 255, 0.25)',
         boxShadow: '0 4px 30px rgba(0, 0, 0, 0.6)'
@@ -497,10 +507,10 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: '13px', color: '#00f2ff', fontWeight: 900, letterSpacing: '3.5px', textShadow: '0 0 12px var(--cyan)' }}>МЕТАЛ-БРЕЗ</div>
-            <div style={{ 
-              fontSize: '8px', 
-              color: status === ConnectionStatus.CONNECTED ? '#00f2ff' : 'rgba(0, 242, 255, 0.4)', 
-              fontWeight: 700, 
+            <div style={{
+              fontSize: '8px',
+              color: status === ConnectionStatus.CONNECTED ? '#00f2ff' : 'rgba(0, 242, 255, 0.4)',
+              fontWeight: 700,
               letterSpacing: '1.5px',
               transition: 'all 0.5s ease',
               textShadow: status === ConnectionStatus.CONNECTED ? '0 0 10px #00f2ff' : 'none',
@@ -512,9 +522,9 @@ export default function App() {
           </div>
           <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-end', height: '16px' }}>
             {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} style={{ 
-                width: '3px', 
-                height: i * 3 + 'px', 
+              <div key={i} style={{
+                width: '3px',
+                height: i * 3 + 'px',
                 background: status === ConnectionStatus.CONNECTED ? '#00f2ff' : '#1e293b',
                 boxShadow: status === ConnectionStatus.CONNECTED ? '0 0 8px #00f2ff' : 'none',
                 borderRadius: '1px',
@@ -525,9 +535,9 @@ export default function App() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button 
+          <button
             onClick={(e) => { e.stopPropagation(); stopAudio(); playSFX('click'); }}
-            style={{ 
+            style={{
               background: isJunSpeaking ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
               border: isJunSpeaking ? '1px solid rgba(239, 68, 68, 0.5)' : '1px solid transparent',
               cursor: 'pointer',
@@ -561,8 +571,8 @@ export default function App() {
       </header>
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-        <div 
-          onClick={toggleMainAction} 
+        <div
+          onClick={toggleMainAction}
           style={{ zIndex: 20, width: '280px', height: '280px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
         >
           <MetalBreathIcon active={status === ConnectionStatus.CONNECTED} speaking={isJunSpeaking} status={status} analyser={analyserRef.current} isUserSpeaking={userIsSpeaking} />
@@ -571,7 +581,7 @@ export default function App() {
 
       <div style={{ width: '100%', padding: '10px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60px', zIndex: 10 }}>
         {lastMessage && (
-          <div style={{ 
+          <div style={{
             fontSize: '12px', fontWeight: 900, color: '#00f2ff', letterSpacing: '5px', textTransform: 'uppercase',
             textShadow: '0 0 10px rgba(0, 242, 255, 0.6)', background: 'rgba(0, 242, 255, 0.1)',
             padding: '8px 20px', borderRadius: '20px', border: '1px solid rgba(0, 242, 255, 0.3)'
@@ -581,9 +591,9 @@ export default function App() {
         )}
       </div>
 
-      <footer style={{ 
-        display: 'grid',  gridTemplateColumns: '1fr 1fr', gap: '12px', padding: '15px', 
-        background: 'rgba(2, 6, 23, 0.95)', backdropFilter: 'blur(30px)', borderTop: '1px solid rgba(0, 242, 255, 0.2)', 
+      <footer style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', padding: '15px',
+        background: 'rgba(2, 6, 23, 0.95)', backdropFilter: 'blur(30px)', borderTop: '1px solid rgba(0, 242, 255, 0.2)',
         paddingBottom: 'calc(15px + env(safe-area-inset-bottom))', zIndex: 100
       }}>
         <FooterBtn label="ОБЩЕНИЕ" color="#4f46e5" onClick={() => triggerAction('ОБЩЕНИЕ', 'Джун, переходи в режим ОБЩЕНИЕ! Прояви инициативу и предложи тему для разговора.')} active={status === ConnectionStatus.CONNECTED} />
@@ -598,11 +608,11 @@ export default function App() {
 }
 
 const FooterBtn = ({ label, onClick, color, active }: any) => (
-  <button onClick={onClick} className="btn-active-flash" style={{ 
-    background: active ? `linear-gradient(135deg, ${color}33, rgba(15, 23, 42, 0.8))` : 'rgba(255, 255, 255, 0.04)', 
-    border: `1px solid ${active ? color : 'rgba(255, 255, 255, 0.15)'}`, 
-    borderRadius: '16px', padding: '18px 6px', color: active ? 'white' : '#64748b', 
-    fontSize: '11px', fontWeight: '900', letterSpacing: '1.5px', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)', 
+  <button onClick={onClick} className="btn-active-flash" style={{
+    background: active ? `linear-gradient(135deg, ${color}33, rgba(15, 23, 42, 0.8))` : 'rgba(255, 255, 255, 0.04)',
+    border: `1px solid ${active ? color : 'rgba(255, 255, 255, 0.15)'}`,
+    borderRadius: '16px', padding: '18px 6px', color: active ? 'white' : '#64748b',
+    fontSize: '11px', fontWeight: '900', letterSpacing: '1.5px', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
     cursor: 'pointer', overflow: 'hidden', position: 'relative', boxShadow: active ? `0 0 20px ${color}22` : 'none'
   }}>
     {active && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent)', animation: 'shimmer 2.5s infinite' }}></div>}
