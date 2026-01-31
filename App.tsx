@@ -305,7 +305,28 @@ export default function App() {
 
       socket.onopen = async () => {
         setStatus(ConnectionStatus.CONNECTED);
-        
+
+        // Отправляем setup сообщение для конфигурации Gemini API
+        const setupMessage = {
+          setup: {
+            model: "models/gemini-2.5-flash-native-audio-preview-09-2025",
+            generationConfig: {
+              responseModalities: ["audio"],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName: "Puck"
+                  }
+                }
+              }
+            },
+            systemInstruction: {
+              parts: [{ text: SYSTEM_INSTRUCTION }]
+            }
+          }
+        };
+        socket.send(JSON.stringify(setupMessage));
+
         // Отправляем начальный приветственный промпт
         const welcomePrompt = initialPrompt || "Привет, Джун! Давай знакомиться!";
         socket.send(JSON.stringify({

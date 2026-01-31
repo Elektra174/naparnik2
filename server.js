@@ -86,27 +86,6 @@ wss.on('connection', (clientWs, req) => {
 
   geminiWs.on('open', () => {
     console.log('🤖 Соединение с нейросетью Джуна установлено');
-    
-    // Отправляем конфигурацию setup сразу при открытии канала
-    const setupMessage = {
-      setup: {
-        model: "models/gemini-2.5-flash-native-audio-preview-09-2025",
-        generationConfig: {
-          responseModalities: ["audio"],
-          speechConfig: {
-            voiceConfig: { 
-              prebuiltVoiceConfig: { 
-                voiceName: "Puck" // Голос, наиболее подходящий энергичному мальчику
-              } 
-            }
-          }
-        },
-        systemInstruction: {
-          parts: [{ text: SYSTEM_INSTRUCTION }]
-        }
-      }
-    };
-    geminiWs.send(JSON.stringify(setupMessage));
   });
 
   // Пересылаем ответы от Джуна обратно Напарнику
