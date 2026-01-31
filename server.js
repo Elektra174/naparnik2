@@ -78,7 +78,7 @@ const SYSTEM_INSTRUCTION = `
 app.use(express.static(path.join(__dirname, 'dist')));
 
 const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`🚀 [v2.1-NUCLEAR] Metal-Breath Proxy running on port ${port}`);
+  console.log(`🚀 [v2.2-REF-SYNC] Metal-Breath Proxy running on port ${port}`);
 });
 
 // Создаем WebSocket сервер на пути /ws
@@ -101,10 +101,10 @@ wss.on('connection', (clientWs, req) => {
     return;
   }
 
-  // Используем v1beta для стабильности
-  const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+  // Используем v1alpha и BiDiGenerateContent для совместимости с рабочими референсами
+  const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key=${apiKey}`;
   // Логируем URL без API ключа
-  console.log('🔗 Подключение к:', geminiUrl.replace(apiKey, '***'));
+  console.log('🔗 [v2.2-REF-SYNC] Подключение к:', geminiUrl.replace(apiKey, '***'));
 
   const messageQueue = [];
   let isGeminiReady = false;
@@ -197,8 +197,15 @@ wss.on('connection', (clientWs, req) => {
         }
       }
 
-      // Логируем важные события (не аудио)
-      if (!resp.serverContent?.modelTurn?.parts?.[0]?.inlineData) {
+      // Логируем важные события
+      const inlineData = resp.serverContent?.modelTurn?.parts?.[0]?.inlineData ||
+        resp.server_content?.model_turn?.parts?.[0]?.inline_data;
+
+      if (inlineData?.data) {
+        // Если есть аудио, логируем только размер для подтверждения работы
+        console.log(`🎵 Получено аудио: ${inlineData.data.length} байт`);
+      } else {
+        // Если не аудио, логируем структуру
         console.log('🤖 Ответ от Gemini:', JSON.stringify(resp, null, 2));
       }
     } catch (e) {
