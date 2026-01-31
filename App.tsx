@@ -430,7 +430,12 @@ export default function App() {
       };
 
       socket.onmessage = async (event) => {
-        const message = JSON.parse(event.data);
+        let textData = event.data;
+        if (event.data instanceof Blob) {
+          textData = await event.data.text();
+        }
+
+        const message = JSON.parse(textData);
 
         // Логируем не аудио сообщения для отладки
         if (!message.serverContent?.modelTurn?.parts?.[0]?.inlineData && !message.server_content?.model_turn?.parts?.[0]?.inline_data) {

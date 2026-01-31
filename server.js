@@ -213,7 +213,8 @@ wss.on('connection', (clientWs, req) => {
     }
 
     if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.send(data);
+      // Отправляем как строку, чтобы браузер (App.tsx) не получал Blob
+      clientWs.send(data.toString());
     }
   });
 
