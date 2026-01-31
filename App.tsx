@@ -219,6 +219,7 @@ export default function App() {
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | AudioWorkletNode | null>(null);
 
   const stopAudio = useCallback(() => {
     sourcesRef.current.forEach(s => { try { s.stop(); } catch (e) {} });
@@ -236,11 +237,43 @@ export default function App() {
       audioStreamRef.current.getTracks().forEach(track => track.stop());
       audioStreamRef.current = null;
     }
+    // Очищаем audio processor
+    if (processorRef.current) {
+      try {
+        processorRef.current.disconnect();
+      } catch (e) {}
+      processorRef.current = null;
+    }
     stopAudio();
     setStatus(ConnectionStatus.DISCONNECTED);
     setLastMessage('');
     playSFX('deactivate');
   }, [stopAudio]);
+
+  // Fallback функция для ScriptProcessorNode (устаревший API)
+  const setupScriptProcessorFallback = useCallback((
+    ctx: AudioContext,
+    source: MediaStreamAudioSourceNode,
+    socket: WebSocket,
+    inputRate: number
+  ) => {
+    const processor = ctx.createScriptProcessor(4096, 1, 1);
+    
+    processor.onaudioprocess = (e) => {
+      if (socket.readyState === WebSocket.OPEN) {
+        const inputData = e.inputBuffer.getChannelData(0);
+        const downsampled = resample(inputData, inputRate, 16000);
+        const pcmBlob = createPcmBlob(downsampled);
+        
+        socket.send(JSON.stringify({
+          realtimeInput: { media: pcmBlob }
+        }));
+      }
+    };
+    source.connect(processor);
+    processor.connect(ctx.destination);
+    processorRef.current = processor;
+  }, []);
 
   const connectToJun = useCallback(async (initialPrompt?: string) => {
     try {
@@ -270,7 +303,7 @@ export default function App() {
       const socket = new WebSocket(wsUrl);
       socketRef.current = socket;
 
-      socket.onopen = () => {
+      socket.onopen = async () => {
         setStatus(ConnectionStatus.CONNECTED);
         
         // Отправляем начальный приветственный промпт
@@ -280,21 +313,75 @@ export default function App() {
         }));
         
         const source = ctx.createMediaStreamSource(stream);
-        const processor = ctx.createScriptProcessor(4096, 1, 1);
         
-        processor.onaudioprocess = (e) => {
-          if (socket.readyState === WebSocket.OPEN) {
-            const inputData = e.inputBuffer.getChannelData(0);
-            const downsampled = resample(inputData, inputRate, 16000);
-            const pcmBlob = createPcmBlob(downsampled);
+        // Используем AudioWorkletNode если доступен, иначе fallback на ScriptProcessorNode
+        const useAudioWorklet = 'audioWorklet' in ctx;
+        
+        if (useAudioWorklet) {
+          // Современный подход с AudioWorklet
+          // Создаем inline AudioWorklet процессор
+          const workletCode = `
+            class AudioRecorderProcessor extends AudioWorkletProcessor {
+              constructor() {
+                super();
+                this.bufferSize = 4096;
+                this.buffer = new Float32Array(this.bufferSize);
+                this.bufferIndex = 0;
+              }
+              
+              process(inputs, outputs, parameters) {
+                const input = inputs[0];
+                if (input && input[0]) {
+                  const channelData = input[0];
+                  for (let i = 0; i < channelData.length; i++) {
+                    this.buffer[this.bufferIndex++] = channelData[i];
+                    if (this.bufferIndex >= this.bufferSize) {
+                      this.port.postMessage({ audioData: this.buffer.slice() });
+                      this.bufferIndex = 0;
+                    }
+                  }
+                }
+                return true;
+              }
+            }
+            registerProcessor('audio-recorder-processor', AudioRecorderProcessor);
+          `;
+          
+          const blob = new Blob([workletCode], { type: 'application/javascript' });
+          const workletUrl = URL.createObjectURL(blob);
+          
+          try {
+            await ctx.audioWorklet.addModule(workletUrl);
+            const workletNode = new AudioWorkletNode(ctx, 'audio-recorder-processor');
             
-            socket.send(JSON.stringify({
-              realtimeInput: { media: pcmBlob }
-            }));
+            workletNode.port.onmessage = (e) => {
+              if (socket.readyState === WebSocket.OPEN) {
+                const audioData = e.data.audioData;
+                const downsampled = resample(audioData, inputRate, 16000);
+                const pcmBlob = createPcmBlob(downsampled);
+                
+                socket.send(JSON.stringify({
+                  realtimeInput: { media: pcmBlob }
+                }));
+              }
+            };
+            
+            source.connect(workletNode);
+            workletNode.connect(ctx.destination);
+            
+            // Сохраняем ссылку для очистки
+            processorRef.current = workletNode;
+          } catch (err) {
+            console.warn('AudioWorklet не удалось инициализировать, используем fallback:', err);
+            // Fallback на ScriptProcessorNode
+            setupScriptProcessorFallback(ctx, source, socket, inputRate);
           }
-        };
-        source.connect(processor);
-        processor.connect(ctx.destination);
+          
+          URL.revokeObjectURL(workletUrl);
+        } else {
+          // Fallback для старых браузеров
+          setupScriptProcessorFallback(ctx, source, socket, inputRate);
+        }
       };
 
       socket.onmessage = async (event) => {
@@ -335,7 +422,7 @@ export default function App() {
       console.error("Connection failed:", err);
       setStatus(ConnectionStatus.ERROR);
     }
-  }, [stopAudio, status]);
+  }, [stopAudio, status, setupScriptProcessorFallback]);
 
   const toggleMainAction = useCallback(() => {
     if (isJunSpeaking) {

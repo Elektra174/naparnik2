@@ -2,10 +2,21 @@ import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import cors from 'cors';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = process.env.PORT || 3000;
+
+// CORS middleware для разрешения запросов с разных источников
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Trust proxy для корректной работы за reverse proxy (Render, nginx и т.д.)
+app.set('trust proxy', 1);
 
 /**
  * РАСШИРЕННЫЕ ИНСТРУКЦИИ ДЛЯ ДЖУНА
@@ -38,22 +49,33 @@ const server = app.listen(port, '0.0.0.0', () => {
 });
 
 // Создаем WebSocket сервер на пути /ws
-const wss = new WebSocketServer({ server, path: '/ws' });
+const wss = new WebSocketServer({ 
+  server, 
+  path: '/ws',
+  // Дополнительные опции для стабильности
+  perMessageDeflate: false,
+  clientTracking: true
+});
 
-wss.on('connection', (clientWs) => {
-  console.log('📱 Напарник подключился к каналу связи');
+wss.on('connection', (clientWs, req) => {
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  console.log(`📱 Напарник подключился к каналу связи (IP: ${clientIp})`);
   
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
     console.error('❌ ОШИБКА: API_KEY не найден в переменных окружения Render!');
-    clientWs.close();
+    clientWs.close(1011, 'Server configuration error');
     return;
   }
 
   // Используем v1beta для стабильности и поддержки новых функций
   const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BiDiGenerateContent?key=${apiKey}`;
   
-  const geminiWs = new WebSocket(geminiUrl);
+  const geminiWs = new WebSocket(geminiUrl, [], {
+    // Таймауты для стабильности соединения
+    handshakeTimeout: 30000,
+    followRedirects: true
+  });
 
   // Пересылаем сообщения от Напарника (браузера) к Джуну (Google)
   clientWs.on('message', (data) => {
@@ -68,7 +90,7 @@ wss.on('connection', (clientWs) => {
     // Отправляем конфигурацию setup сразу при открытии канала
     const setupMessage = {
       setup: {
-        model: "models/gemini-2.0-flash-exp",
+        model: "models/gemini-2.5-flash-preview-native-audio-dialog",
         generationConfig: {
           responseModalities: ["audio"],
           speechConfig: {
@@ -95,8 +117,34 @@ wss.on('connection', (clientWs) => {
     }
   });
 
-  geminiWs.on('error', (err) => console.error('❌ Ошибка на стороне Джуна:', err.message));
+  // Обработка ошибок с логированием для диагностики проблем с VPN/регионами
+  geminiWs.on('error', (err) => {
+    console.error('❌ Ошибка на стороне Джуна (Google API):', err.message);
+    // Проверяем типичные ошибки соединения
+    if (err.message.includes('ECONNREFUSED') || err.message.includes('ETIMEDOUT')) {
+      console.error('⚠️ Возможно, проблема с сетью или Google API недоступен в данном регионе');
+    }
+    if (err.message.includes('403') || err.message.includes('401')) {
+      console.error('⚠️ Проблема с API ключом или доступом');
+    }
+  });
+  
   clientWs.on('error', (err) => console.error('❌ Ошибка на стороне Напарника:', err.message));
+  
+  // Пинг-понг для поддержания соединения
+  const pingInterval = setInterval(() => {
+    if (clientWs.readyState === WebSocket.OPEN) {
+      clientWs.ping();
+    }
+  }, 30000);
+  
+  clientWs.on('pong', () => {
+    // Клиент ответил на пинг, соединение активно
+  });
+  
+  clientWs.on('close', () => {
+    clearInterval(pingInterval);
+  });
 
   clientWs.on('close', () => {
     console.log('📱 Напарник вышел из эфира');
