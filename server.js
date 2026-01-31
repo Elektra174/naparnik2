@@ -69,8 +69,8 @@ wss.on('connection', (clientWs, req) => {
     return;
   }
 
-  // Используем v1alpha для preview моделей
-  const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key=${apiKey}`;
+  // Используем v1beta для стабильности
+  const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BiDiGenerateContent?key=${apiKey}`;
 
   // Логируем URL без API ключа
   console.log('🔗 Подключение к:', geminiUrl.replace(apiKey, '***'));
