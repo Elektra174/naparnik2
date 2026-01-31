@@ -102,9 +102,12 @@ wss.on('connection', (clientWs, req) => {
   }
 
   // Используем v1beta для стабильности
-  const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+  const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
   // Логируем URL без API ключа
   console.log('🔗 Подключение к:', geminiUrl.replace(apiKey, '***'));
+
+  const messageQueue = [];
+  let isGeminiReady = false;
 
   // Получаем настройки прокси из переменных окружения
   const proxyHost = process.env.PROXY_HOST;
@@ -129,37 +132,70 @@ wss.on('connection', (clientWs, req) => {
     followRedirects: true
   });
 
+  let setupReceived = false;
+
   // Пересылаем сообщения от Напарника (браузера) к Джуну (Google)
   clientWs.on('message', (data) => {
-    console.log('📩 Получено сообщение от клиента, размер:', data.length, 'байт');
-    // Логируем первые 200 символов для отладки (может быть бинарные данные)
+    let isSetup = false;
     try {
-      const preview = data.toString('utf-8', 0, Math.min(data.length, 200));
-      console.log('📄 Содержимое (первые 200 символов):', preview);
-    } catch (e) {
-      console.log('📄 Бинарные данные (не текст)');
-    }
+      const msgStr = data.toString();
+      if (msgStr.includes('"setup":')) isSetup = true;
+    } catch (e) { }
 
-    if (geminiWs.readyState === WebSocket.OPEN) {
-      geminiWs.send(data);
+    // Если это setup сообщение, шлем его сразу как только Google открыт
+    // Остальное копим до получения SetupComplete
+    if (isGeminiReady && (isSetup || (setupReceived && !isFlushing))) {
+      if (geminiWs.readyState === WebSocket.OPEN) {
+        geminiWs.send(data);
+        if (isSetup) console.log('⚙️ Отправлены настройки (Setup)');
+      }
+    } else {
+      messageQueue.push(data);
     }
   });
 
   geminiWs.on('open', () => {
-    console.log('🤖 Соединение с нейросетью Джуна установлено');
+    console.log('🤖 Соединение с нейросетью Джуна установлено. Ожидание подтверждения Setup...');
+    isGeminiReady = true;
   });
 
   // Пересылаем ответы от Джуна обратно Напарнику
   geminiWs.on('message', (data) => {
-    console.log('📨 Получено сообщение ОТ ДЖУНА (Google), размер:', data.length);
     try {
-      const preview = data.toString('utf-8', 0, Math.min(data.length, 300));
-      console.log('📄 Содержимое от Джуна:', preview);
+      const resp = JSON.parse(data.toString());
+
+      // Если пришло подтверждение настройки, начинаем сброс очереди
+      if (resp.setupComplete && !setupReceived) {
+        console.log('✅ Gemini подтвердил настройку (SetupComplete). Начинаю отправку сообщений...');
+        setupReceived = true;
+
+        if (messageQueue.length > 0) {
+          isFlushing = true;
+          const flush = async () => {
+            console.log(`📤 Отправка ${messageQueue.length} накопленных сообщений...`);
+            while (messageQueue.length > 0) {
+              const msg = messageQueue.shift();
+              if (geminiWs.readyState === WebSocket.OPEN) {
+                geminiWs.send(msg);
+              }
+              await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            isFlushing = false;
+            console.log('🚀 Очередь пуста, перехожу в живой режим');
+          };
+          flush();
+        }
+      }
+
+      // Логируем важные события (не аудио)
+      if (!resp.serverContent?.modelTurn?.parts?.[0]?.inlineData) {
+        console.log('🤖 Ответ от Gemini:', JSON.stringify(resp, null, 2));
+      }
     } catch (e) {
-      console.log('📄 Бинарные данные от Джуна');
+      // Игнорируем ошибки парсинга бинарных аудио-данных
     }
+
     if (clientWs.readyState === WebSocket.OPEN) {
-      // Поддержка как JSON-сообщений, так и бинарных аудио-данных
       clientWs.send(data);
     }
   });

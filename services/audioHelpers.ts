@@ -41,7 +41,9 @@ export function createPcmBlob(data: Float32Array): { data: string; mimeType: str
   const l = data.length;
   const int16 = new Int16Array(l);
   for (let i = 0; i < l; i++) {
-    int16[i] = data[i] * 32768;
+    // Безопасное ограничение амплитуды (clamping)
+    const s = Math.max(-1, Math.min(1, data[i]));
+    int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
   }
   return {
     data: encode(new Uint8Array(int16.buffer)),

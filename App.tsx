@@ -266,10 +266,10 @@ export default function App() {
         const pcmBlob = createPcmBlob(downsampled);
 
         socket.send(JSON.stringify({
-          realtime_input: {
-            media_chunks: [{
+          realtimeInput: {
+            mediaChunks: [{
               data: pcmBlob.data,
-              mime_type: pcmBlob.mimeType
+              mimeType: pcmBlob.mimeType
             }]
           }
         }));
@@ -314,18 +314,18 @@ export default function App() {
         // Отправляем setup сообщение для конфигурации Gemini API
         const setupMessage = {
           setup: {
-            model: "models/gemini-2.0-flash-exp",
-            generation_config: {
-              response_modalities: ["audio"],
-              speech_config: {
-                voice_config: {
-                  prebuilt_voice_config: {
-                    voice_name: "Puck"
+            model: "models/gemini-2.5-flash-native-audio-preview-09-2025",
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName: "Puck"
                   }
                 }
               }
             },
-            system_instruction: {
+            systemInstruction: {
               parts: [{ text: SYSTEM_INSTRUCTION }]
             }
           }
@@ -335,14 +335,14 @@ export default function App() {
         // Отправляем начальный приветственный промпт через client_content
         const welcomePrompt = initialPrompt || "Привет, Джун! Давай знакомиться!";
         socket.send(JSON.stringify({
-          client_content: {
+          clientContent: {
             turns: [
               {
                 role: "user",
                 parts: [{ text: welcomePrompt }]
               }
             ],
-            turn_complete: true
+            turnComplete: true
           }
         }));
 
@@ -360,7 +360,7 @@ export default function App() {
                 class AudioRecorderProcessor extends AudioWorkletProcessor {
                   constructor() {
                     super();
-                    this.bufferSize = 4096;
+                    this.bufferSize = 2048;
                     this.buffer = new Float32Array(this.bufferSize);
                     this.bufferIndex = 0;
                   }
@@ -401,10 +401,10 @@ export default function App() {
                 const pcmBlob = createPcmBlob(downsampled);
 
                 socket.send(JSON.stringify({
-                  realtime_input: {
-                    media_chunks: [{
+                  realtimeInput: {
+                    mediaChunks: [{
                       data: pcmBlob.data,
-                      mime_type: pcmBlob.mimeType
+                      mimeType: pcmBlob.mimeType
                     }]
                   }
                 }));
@@ -490,14 +490,14 @@ export default function App() {
     if (status === ConnectionStatus.CONNECTED && socketRef.current) {
       stopAudio();
       socketRef.current.send(JSON.stringify({
-        client_content: {
+        clientContent: {
           turns: [
             {
               role: "user",
               parts: [{ text: prompt }]
             }
           ],
-          turn_complete: true
+          turnComplete: true
         }
       }));
     } else {
