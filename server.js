@@ -119,6 +119,13 @@ wss.on('connection', (clientWs, req) => {
 
   // Пересылаем ответы от Джуна обратно Напарнику
   geminiWs.on('message', (data) => {
+    console.log('📨 Получено сообщение ОТ ДЖУНА (Google), размер:', data.length);
+    try {
+      const preview = data.toString('utf-8', 0, Math.min(data.length, 300));
+      console.log('📄 Содержимое от Джуна:', preview);
+    } catch (e) {
+      console.log('📄 Бинарные данные от Джуна');
+    }
     if (clientWs.readyState === WebSocket.OPEN) {
       // Поддержка как JSON-сообщений, так и бинарных аудио-данных
       clientWs.send(data);
@@ -181,9 +188,14 @@ wss.on('connection', (clientWs, req) => {
     if (geminiWs.readyState === WebSocket.OPEN) geminiWs.close();
   });
 
-  geminiWs.on('close', () => {
-    console.log('🤖 Канал Джуна закрыт');
+  geminiWs.on('close', (code, reason) => {
+    console.log('🔴 Соединение с Джуном (Google) закрыто. Код:', code, 'Причина:', reason?.toString() || 'не указана');
     if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
+  });
+
+  geminiWs.on('error', (err) => {
+    console.error('❌ Ошибка WebSocket соединения с Джуном (Google):', err.message);
+    console.error('📋 Детали ошибки:', err);
   });
 });
 

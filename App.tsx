@@ -323,7 +323,8 @@ export default function App() {
             systemInstruction: {
               parts: [{ text: SYSTEM_INSTRUCTION }]
             }
-          }
+          },
+          turnComplete: true
         };
         socket.send(JSON.stringify(setupMessage));
 
