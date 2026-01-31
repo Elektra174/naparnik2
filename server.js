@@ -90,7 +90,7 @@ wss.on('connection', (clientWs, req) => {
     // Отправляем конфигурацию setup сразу при открытии канала
     const setupMessage = {
       setup: {
-        model: "models/gemini-2.5-flash-preview-native-audio-dialog",
+        model: "models/gemini-2.5-flash-native-audio-preview-12-2025",
         generationConfig: {
           responseModalities: ["audio"],
           speechConfig: {

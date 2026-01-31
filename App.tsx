@@ -319,32 +319,38 @@ export default function App() {
         
         if (useAudioWorklet) {
           // Современный подход с AudioWorklet
-          // Создаем inline AudioWorklet процессор
+          // Проверяем, не зарегистрирован ли уже процессор
           const workletCode = `
-            class AudioRecorderProcessor extends AudioWorkletProcessor {
-              constructor() {
-                super();
-                this.bufferSize = 4096;
-                this.buffer = new Float32Array(this.bufferSize);
-                this.bufferIndex = 0;
-              }
-              
-              process(inputs, outputs, parameters) {
-                const input = inputs[0];
-                if (input && input[0]) {
-                  const channelData = input[0];
-                  for (let i = 0; i < channelData.length; i++) {
-                    this.buffer[this.bufferIndex++] = channelData[i];
-                    if (this.bufferIndex >= this.bufferSize) {
-                      this.port.postMessage({ audioData: this.buffer.slice() });
-                      this.bufferIndex = 0;
+            if (typeof registerProcessor !== 'undefined') {
+              try {
+                class AudioRecorderProcessor extends AudioWorkletProcessor {
+                  constructor() {
+                    super();
+                    this.bufferSize = 4096;
+                    this.buffer = new Float32Array(this.bufferSize);
+                    this.bufferIndex = 0;
+                  }
+                  
+                  process(inputs, outputs, parameters) {
+                    const input = inputs[0];
+                    if (input && input[0]) {
+                      const channelData = input[0];
+                      for (let i = 0; i < channelData.length; i++) {
+                        this.buffer[this.bufferIndex++] = channelData[i];
+                        if (this.bufferIndex >= this.bufferSize) {
+                          this.port.postMessage({ audioData: this.buffer.slice() });
+                          this.bufferIndex = 0;
+                        }
+                      }
                     }
+                    return true;
                   }
                 }
-                return true;
+                registerProcessor('audio-recorder-processor', AudioRecorderProcessor);
+              } catch (e) {
+                // Процессор уже зарегистрирован, игнорируем ошибку
               }
             }
-            registerProcessor('audio-recorder-processor', AudioRecorderProcessor);
           `;
           
           const blob = new Blob([workletCode], { type: 'application/javascript' });
