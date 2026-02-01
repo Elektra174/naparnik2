@@ -164,6 +164,7 @@ wss.on('connection', (clientWs, req) => {
   let setupReceived = false;
   let isFlushing = false;
   let conversationLog = ""; // Для суммаризации в конце
+  let lastSaveTime = 0; // Для троттлинга автосохранения
 
   // Пытаемся восстановить память из Firebase
   const recoverMemory = async () => {
@@ -359,6 +360,35 @@ wss.on('connection', (clientWs, req) => {
                 updatedAt: new Date().toISOString()
               }).catch(err => console.error('Ошибка сохранения правила:', err));
             }
+          }
+
+          // 3. АВТОСОХРАНЕНИЕ ДИАЛОГА (PERIODIC AUTOSAVE)
+          // Сохраняем историю каждые 10 секунд активности
+          const now = Date.now();
+          if (now - lastSaveTime > 10000 && db) {
+            lastSaveTime = now;
+            console.log('💾 [AUTOSAVE] Синхронизация истории с базой...');
+            db.collection('memories').doc('global_context').set({
+              summary: conversationLog.slice(-2000),
+              updatedAt: new Date().toISOString()
+            }, { merge: true }).catch(e => console.error('Autosave error:', e));
+          }
+
+          // 4. КОМАНДА СБРОСА ПАМЯТИ ("Забудь всё")
+          if (text.match(/Забудь всё|Сброс памяти|Очисти память/i) && db) {
+            console.log('🧹 [WIPE] Получена команда полного стирания памяти.');
+            conversationLog = "";
+            currentData = { facts: [], rules: [] };
+
+            db.collection('memories').doc('global_context').set({
+              summary: "",
+              userName: null,
+              rules: [],
+              facts: [],
+              updatedAt: new Date().toISOString()
+            }).then(() => {
+              console.log('✨ Память полностью очищена.');
+            });
           }
         }
       }
