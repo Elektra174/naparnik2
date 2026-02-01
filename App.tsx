@@ -398,7 +398,7 @@ export default function App() {
           setup: {
             model: "models/gemini-2.5-flash-native-audio-preview-12-2025",
             generationConfig: {
-              responseModalities: ["AUDIO"],
+              responseModalities: ["AUDIO", "TEXT"], // Text required for memory!
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: {
@@ -415,8 +415,9 @@ export default function App() {
         };
         socket.send(JSON.stringify(setupMessage));
 
-        // Отправляем начальный приветственный промпт
-        const welcomePrompt = initialPrompt || "Привет, Джун! Поприветствуй меня голосом!";
+        // [SYSTEM TRIGGER] Send a hidden system prompt to force Jun to speak first.
+        // This ensures he greets/introduces himself as requested, but doesn't look like the user said it.
+        const welcomePrompt = initialPrompt || "[SYSTEM]: Connection established. Start conversation according to your instructions.";
         socket.send(JSON.stringify({
           clientContent: {
             turns: [

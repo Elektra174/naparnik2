@@ -242,7 +242,11 @@ wss.on('connection', (clientWs, req) => {
       try {
         const json = JSON.parse(msgStr);
         if (json.clientContent?.turns?.[0]?.parts?.[0]?.text) {
-          conversationLog += `\nНапарник: ${json.clientContent.turns[0].parts[0].text}`;
+          const userText = json.clientContent.turns[0].parts[0].text;
+          // [FILTER] Не логируем системные триггеры
+          if (!userText.startsWith('[SYSTEM]')) {
+            conversationLog += `\nНапарник: ${userText}`;
+          }
         }
       } catch (e) { }
 
