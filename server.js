@@ -127,39 +127,174 @@ wss.on('connection', (clientWs, req) => {
     return;
   }
 
-  // Используем v1beta и BidiGenerateContent для стабильного подключения
-  const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
-  // Логируем URL без API ключа
-  console.log('🔗 [v4.2-FINAL] Подключение к:', geminiUrl.replace(apiKey, '***'));
+  // [SESSION PERSISTENCE] Reconnection Logic
+  let geminiWs = null;
+  let cachedSetupMessage = null;
+  let isReconnecting = false;
 
-  const messageQueue = [];
-  let isGeminiReady = false;
+  const connectToGemini = () => {
+    const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+    console.log(`🔗 [v4.3-AUTO] Подключение к Google (Reconnection: ${isReconnecting})...`);
 
-  // Получаем настройки прокси из переменных окружения
-  const proxyHost = process.env.PROXY_HOST;
-  const proxyPort = process.env.PROXY_PORT;
-  const proxyUser = process.env.PROXY_USER;
-  const proxyPass = process.env.PROXY_PASS;
+    geminiWs = new WebSocket(geminiUrl, [], {
+      agent: agent,
+      handshakeTimeout: 30000,
+      headers: { "User-Agent": "MPT-Connectum/3.0.0" }
+    });
 
-  // Создаем прокси агента только если заданы хост и порт
-  let agent = null;
-  if (proxyHost && proxyPort) {
-    const proxyUrl = `http://${proxyUser}:${proxyPass}@${proxyHost}:${proxyPort}`;
-    agent = new HttpsProxyAgent(proxyUrl);
-    console.log('🌐 Используется прокси:', proxyHost + ':' + proxyPort);
-  } else {
-    console.log('🌐 Прокси не настроен, прямое подключение');
-  }
+    geminiWs.on('open', () => {
+      console.log('🤖 [v4.3] Канал восстановлен.');
+      // Если это реконнект - шлем настройки заново
+      if (isReconnecting && cachedSetupMessage) {
+        console.log('🔄 [RESUME] Восстановление сессии (отправка конфига)...');
+        geminiWs.send(cachedSetupMessage);
+      }
+      isReconnecting = false;
+    });
 
-  console.log('🚀 Запуск Elite HANDSHAKE v2.0-DEADLOCK-FIX');
+    geminiWs.on('message', (data) => {
+      // (Logic will be attached below via a shared handler or simply re-defined here? 
+      //  Better to have handleGeminiMessage function)
+      handleGeminiMessage(data);
+    });
 
-  const geminiWs = new WebSocket(geminiUrl, [], {
-    agent: agent,
-    handshakeTimeout: 30000,
-    headers: {
-      "User-Agent": "MPT-Connectum/3.0.0"
+    geminiWs.on('close', (code, reason) => {
+      console.log(`🔴 Разрыв с Google (${code}). Пытаюсь переподключиться...`);
+      isReconnecting = true;
+      setTimeout(connectToGemini, 1000); // Auto-retry
+    });
+
+    geminiWs.on('error', (err) => {
+      console.error('❌ Ошибка Google WS:', err.message);
+    });
+  };
+
+  // Helper to handle messages (extracted from original code)
+  const handleGeminiMessage = (data) => {
+    try {
+      const resp = JSON.parse(data.toString());
+
+      const isSetupComplete = resp.setupComplete || resp.setup_complete;
+      if (isSetupComplete && !setupReceived) {
+        console.log('✅ [v2.0] Gemini подтвердил настройку. Сбрасываю звук и приветствие...');
+        setupReceived = true;
+
+        if (messageQueue.length > 0) {
+          isFlushing = true;
+          const flush = async () => {
+            console.log(`📤 [v2.0] Сброс ${messageQueue.length} сообщений...`);
+            while (messageQueue.length > 0) {
+              const msg = messageQueue.shift();
+              if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+                geminiWs.send(msg);
+              }
+            }
+            isFlushing = false;
+            console.log('🚀 [v2.0] Система в режиме реального времени');
+          };
+          flush();
+        }
+      }
+
+      // Логируем важные события
+      const inlineData = resp.serverContent?.modelTurn?.parts?.[0]?.inlineData ||
+        resp.server_content?.model_turn?.parts?.[0]?.inline_data;
+
+      if (inlineData?.data) {
+        // console.log(`🎵 Получено аудио: ${inlineData.data.length} байт`);
+      } else {
+        // console.log('🤖 Ответ от Gemini:', JSON.stringify(resp, null, 2));
+      }
+
+      // Логируем текстовые сообщения от Джуна
+      const serverContent = resp.serverContent || resp.server_content;
+      const modelTurn = serverContent?.modelTurn || serverContent?.model_turn;
+      const parts = modelTurn?.parts;
+
+      let textPart = parts?.[0]?.text;
+      if (!textPart) {
+        // Try reading transcript from native audio model
+        const transcript = serverContent?.outputTranscription?.text ||
+          serverContent?.output_transcription?.text;
+        if (transcript) {
+          textPart = transcript;
+          console.log(`🗣️ [TRANSCRIPT] Распознано из аудио: "${textPart}"`);
+        }
+      }
+
+      if (textPart) {
+        let text = textPart;
+        text = text.replace(/\*\*.*?\*\*/g, '').replace(/\[.*?\]/g, '').trim();
+        if (text && !parts[0].thought) {
+          conversationLog += `\nДжун: ${text}`;
+          console.log(`📝 Записано в память: "${text.substring(0, 50)}..."`);
+
+          const tailLog = conversationLog.slice(-300);
+
+          // 1. ИМЯ
+          const nameConfirmMatch = tailLog.match(/Твое имя записано:\s*([А-Яа-яЁёA-Za-z]+)/i);
+          if (nameConfirmMatch && db) {
+            const detectedName = nameConfirmMatch[1];
+            if (currentData.userName !== detectedName) {
+              console.log(`⚡ [REAL-TIME] Мгновенная запись имени в базу: ${detectedName}`);
+              currentData.userName = detectedName;
+              db.collection('memories').doc('global_context').set({
+                userName: detectedName,
+                updatedAt: new Date().toISOString()
+              }, { merge: true }).catch(err => console.error('Ошибка мгновенного сохранения:', err));
+            }
+          }
+
+          // 2. ПОПРАВКИ
+          const correctionMatch = tailLog.match(/Запомнил поправку:\s*(.+)/i);
+          if (correctionMatch && db) {
+            const newRule = correctionMatch[1].trim();
+            if (!conversationLog.includes(`[SAVED_RULE: ${newRule}]`)) {
+              console.log(`🎓 [TEACHER] Новое правило изучено: ${newRule}`);
+              conversationLog += ` [SAVED_RULE: ${newRule}]`;
+
+              db.collection('memories').doc('global_context').update({
+                rules: admin.firestore.FieldValue.arrayUnion(newRule),
+                updatedAt: new Date().toISOString()
+              }).catch(err => console.error('Ошибка сохранения правила:', err));
+            }
+          }
+
+          // 3. АВТОСОХРАНЕНИЕ
+          const now = Date.now();
+          if (now - lastSaveTime > 10000 && db) {
+            lastSaveTime = now;
+            console.log('💾 [AUTOSAVE] Синхронизация истории с базой...');
+            db.collection('memories').doc('global_context').set({
+              summary: conversationLog.slice(-2000),
+              updatedAt: new Date().toISOString()
+            }, { merge: true }).catch(e => console.error('Autosave error:', e));
+          }
+
+          // 4. КОМАНДА СБРОСА ПАМЯТИ
+          if (text.match(/Забудь всё|Сброс памяти|Очисти память/i) && db) {
+            console.log('🧹 [WIPE] Получена команда полного стирания памяти.');
+            conversationLog = "";
+            currentData = { facts: [], rules: [] };
+            db.collection('memories').doc('global_context').set({
+              summary: "", userName: null, rules: [], facts: [], updatedAt: new Date().toISOString()
+            }).then(() => console.log('✨ Память полностью очищена.'));
+          }
+        }
+      }
+
+    } catch (e) { }
+
+    if (clientWs.readyState === WebSocket.OPEN) {
+      clientWs.send(data.toString());
     }
-  });
+  };
+
+  // Actually, simpler approach:
+  // We keep `geminiWs` as a let. 
+  // We attach the SAME `onMessage` handler to the new instance.
+
+  connectToGemini();
 
   let setupReceived = false;
   let isFlushing = false;
@@ -218,8 +353,12 @@ wss.on('connection', (clientWs, req) => {
               const setupObj = JSON.parse(msgStr);
               if (setupObj.setup && setupObj.setup.systemInstruction) {
                 setupObj.setup.systemInstruction.parts[0].text += memoryContext;
+
+                // [RESUMPTION] Cache the complete setup message for auto-reconnect
                 const modifiedData = JSON.stringify(setupObj);
-                if (geminiWs.readyState === WebSocket.OPEN) {
+                cachedSetupMessage = modifiedData; // Save for later attempts
+
+                if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
                   geminiWs.send(modifiedData);
                 } else {
                   messageQueue.push(modifiedData);
@@ -229,9 +368,11 @@ wss.on('connection', (clientWs, req) => {
             } catch (e) { console.error('Memory injection failed', e); }
           }
           // Если памяти нет или ошибка - шлем как есть
-          if (geminiWs.readyState === WebSocket.OPEN) {
+          if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+            cachedSetupMessage = data.toString(); // Save raw if processing failed
             geminiWs.send(data);
           } else {
+            cachedSetupMessage = data.toString();
             messageQueue.push(data);
           }
         });
@@ -263,183 +404,6 @@ wss.on('connection', (clientWs, req) => {
     }
   });
 
-  geminiWs.on('open', () => {
-    console.log('🤖 [v2.0] Канал с Google открыт. Проверяю очередь...');
-    isGeminiReady = true;
-
-    // ВАЖНО: Находим setup в очереди и шлем его ПЕРВЫМ И СРАЗУ
-    const setupIndex = messageQueue.findIndex(m => m.toString().includes('"setup":'));
-    if (setupIndex !== -1) {
-      console.log('⚙️ [v2.0] Нано-фикс: Setup найден в очереди, ПУСК!');
-      geminiWs.send(messageQueue.splice(setupIndex, 1)[0]);
-    }
-  });
-
-  // Пересылаем ответы от Джуна обратно Напарнику
-  geminiWs.on('message', (data) => {
-    try {
-      const resp = JSON.parse(data.toString());
-
-      const isSetupComplete = resp.setupComplete || resp.setup_complete;
-      if (isSetupComplete && !setupReceived) {
-        console.log('✅ [v2.0] Gemini подтвердил настройку. Сбрасываю звук и приветствие...');
-        setupReceived = true;
-
-        if (messageQueue.length > 0) {
-          isFlushing = true;
-          const flush = async () => {
-            console.log(`📤 [v2.0] Сброс ${messageQueue.length} сообщений...`);
-            while (messageQueue.length > 0) {
-              const msg = messageQueue.shift();
-              if (geminiWs.readyState === WebSocket.OPEN) {
-                geminiWs.send(msg);
-              }
-              // Убрали задержку для INSTANT режима
-              // await new Promise(resolve => setTimeout(resolve, 50));
-            }
-            isFlushing = false;
-            console.log('🚀 [v2.0] Система в режиме реального времени');
-          };
-          flush();
-        }
-      }
-
-      // Логируем важные события
-      const inlineData = resp.serverContent?.modelTurn?.parts?.[0]?.inlineData ||
-        resp.server_content?.model_turn?.parts?.[0]?.inline_data;
-
-      if (inlineData?.data) {
-        // Если есть аудио, логируем только размер для подтверждения работы
-        console.log(`🎵 Получено аудио: ${inlineData.data.length} байт`);
-      } else {
-        // Если не аудио, логируем структуру
-        console.log('🤖 Ответ от Gemini:', JSON.stringify(resp, null, 2));
-      }
-
-      // Логируем текстовые сообщения от Джуна для суммаризации (фильтруем "мысли" и markdown)
-      const serverContent = resp.serverContent || resp.server_content;
-      const modelTurn = serverContent?.modelTurn || serverContent?.model_turn;
-      const parts = modelTurn?.parts;
-      const textPart = parts?.[0]?.text;
-
-      if (textPart) {
-        let text = textPart;
-        // Убираем маркдаун и внутренние мысли, если они пролезли в текст
-        text = text.replace(/\*\*.*?\*\*/g, '').replace(/\[.*?\]/g, '').trim();
-        if (text && !parts[0].thought) {
-          conversationLog += `\nДжун: ${text}`;
-          console.log(`📝 Записано в память: "${text.substring(0, 50)}..."`);
-
-          // [MEMORY FIX] Теперь сканируем "хвост" общего лога, а не только текущий кусочек
-          // Это решает проблему разрыва фраз между пакетами WebSocket
-          const tailLog = conversationLog.slice(-300);
-
-          // 1. ИМЯ
-          const nameConfirmMatch = tailLog.match(/Твое имя записано:\s*([А-Яа-яЁёA-Za-z]+)/i);
-          if (nameConfirmMatch && db) {
-            const detectedName = nameConfirmMatch[1];
-            // Проверяем, не сохраняли ли мы это уже в текущей сессии
-            if (currentData.userName !== detectedName) {
-              console.log(`⚡ [REAL-TIME] Мгновенная запись имени в базу: ${detectedName}`);
-              currentData.userName = detectedName; // Обновляем локальный кэш
-              db.collection('memories').doc('global_context').set({
-                userName: detectedName,
-                updatedAt: new Date().toISOString()
-              }, { merge: true }).catch(err => console.error('Ошибка мгновенного сохранения:', err));
-            }
-          }
-
-          // 2. ПОПРАВКИ
-          const correctionMatch = tailLog.match(/Запомнил поправку:\s*(.+)/i);
-          if (correctionMatch && db) {
-            const newRule = correctionMatch[1].trim();
-            // Простейшая защита от дублей в рамках сессии
-            // (В базе arrayUnion тоже защитит, но так мы не спамим запросами)
-            if (!conversationLog.includes(`[SAVED_RULE: ${newRule}]`)) {
-              console.log(`🎓 [TEACHER] Новое правило изучено: ${newRule}`);
-              conversationLog += ` [SAVED_RULE: ${newRule}]`; // Маркер, что мы это обработали
-
-              db.collection('memories').doc('global_context').update({
-                rules: admin.firestore.FieldValue.arrayUnion(newRule),
-                updatedAt: new Date().toISOString()
-              }).catch(err => console.error('Ошибка сохранения правила:', err));
-            }
-          }
-
-          // 3. АВТОСОХРАНЕНИЕ ДИАЛОГА (PERIODIC AUTOSAVE)
-          // Сохраняем историю каждые 10 секунд активности
-          const now = Date.now();
-          if (now - lastSaveTime > 10000 && db) {
-            lastSaveTime = now;
-            console.log('💾 [AUTOSAVE] Синхронизация истории с базой...');
-            db.collection('memories').doc('global_context').set({
-              summary: conversationLog.slice(-2000),
-              updatedAt: new Date().toISOString()
-            }, { merge: true }).catch(e => console.error('Autosave error:', e));
-          }
-
-          // 4. КОМАНДА СБРОСА ПАМЯТИ ("Забудь всё")
-          if (text.match(/Забудь всё|Сброс памяти|Очисти память/i) && db) {
-            console.log('🧹 [WIPE] Получена команда полного стирания памяти.');
-            conversationLog = "";
-            currentData = { facts: [], rules: [] };
-
-            db.collection('memories').doc('global_context').set({
-              summary: "",
-              userName: null,
-              rules: [],
-              facts: [],
-              updatedAt: new Date().toISOString()
-            }).then(() => {
-              console.log('✨ Память полностью очищена.');
-            });
-          }
-        }
-      }
-
-    } catch (e) {
-      // Игнорируем ошибки парсинга бинарных аудио-данных
-    }
-
-    if (clientWs.readyState === WebSocket.OPEN) {
-      // Отправляем как строку, чтобы браузер (App.tsx) не получал Blob
-      clientWs.send(data.toString());
-    }
-  });
-
-  // Обработка ошибок с логированием для диагностики проблем с VPN/регионами
-  geminiWs.on('error', (err) => {
-    console.error('❌ Ошибка на стороне Джуна (Google API):', err.message);
-    console.error('📋 Полная ошибка:', err);
-    // Проверяем типичные ошибки соединения
-    if (err.message.includes('ECONNREFUSED') || err.message.includes('ETIMEDOUT')) {
-      console.error('⚠️ Возможно, проблема с сетью или Google API недоступен в данном регионе');
-    }
-    if (err.message.includes('403') || err.message.includes('401')) {
-      console.error('⚠️ Проблема с API ключом или доступом');
-    }
-  });
-
-  // Обработка unexpected-response для получения тела ответа 404 и других ошибок
-  geminiWs.on('unexpected-response', (request, response) => {
-    console.error('❌ Unexpected response от Google API:');
-    console.error('   Статус код:', response.statusCode);
-    console.error('   Статус сообщение:', response.statusMessage);
-    console.error('   Заголовки:', JSON.stringify(response.headers, null, 2));
-
-    let responseBody = '';
-    response.on('data', (chunk) => {
-      responseBody += chunk.toString();
-    });
-
-    response.on('end', () => {
-      console.error('📄 Тело ответа:', responseBody);
-    });
-
-    response.on('error', (err) => {
-      console.error('❌ Ошибка при чтении тела ответа:', err.message);
-    });
-  });
 
   clientWs.on('error', (err) => console.error('❌ Ошибка на стороне Напарника:', err.message));
 
