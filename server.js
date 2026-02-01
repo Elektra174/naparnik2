@@ -325,28 +325,40 @@ wss.on('connection', (clientWs, req) => {
           conversationLog += `\nДжун: ${text}`;
           console.log(`📝 Записано в память: "${text.substring(0, 50)}..."`);
 
-          // [REAL-TIME MEMORY] Мгновенное сохранение имени при обнаружении подтверждения
-          const nameConfirmMatch = text.match(/Твое имя записано:\s*([А-Яа-яЁёA-Za-z]+)/i);
+          // [MEMORY FIX] Теперь сканируем "хвост" общего лога, а не только текущий кусочек
+          // Это решает проблему разрыва фраз между пакетами WebSocket
+          const tailLog = conversationLog.slice(-300);
+
+          // 1. ИМЯ
+          const nameConfirmMatch = tailLog.match(/Твое имя записано:\s*([А-Яа-яЁёA-Za-z]+)/i);
           if (nameConfirmMatch && db) {
             const detectedName = nameConfirmMatch[1];
-            console.log(`⚡ [REAL-TIME] Мгновенная запись имени в базу: ${detectedName}`);
-            db.collection('memories').doc('global_context').set({
-              userName: detectedName,
-              updatedAt: new Date().toISOString()
-            }, { merge: true }).catch(err => console.error('Ошибка мгновенного сохранения:', err));
+            // Проверяем, не сохраняли ли мы это уже в текущей сессии
+            if (currentData.userName !== detectedName) {
+              console.log(`⚡ [REAL-TIME] Мгновенная запись имени в базу: ${detectedName}`);
+              currentData.userName = detectedName; // Обновляем локальный кэш
+              db.collection('memories').doc('global_context').set({
+                userName: detectedName,
+                updatedAt: new Date().toISOString()
+              }, { merge: true }).catch(err => console.error('Ошибка мгновенного сохранения:', err));
+            }
           }
 
-          // [SELF-CORRECTION] Мгновенное сохранение поправок
-          // Ищем: "Запомнил поправку: [текст]"
-          const correctionMatch = text.match(/Запомнил поправку:\s*(.+)/i);
+          // 2. ПОПРАВКИ
+          const correctionMatch = tailLog.match(/Запомнил поправку:\s*(.+)/i);
           if (correctionMatch && db) {
             const newRule = correctionMatch[1].trim();
-            console.log(`🎓 [TEACHER] Новое правило изучено: ${newRule}`);
-            // Используем arrayUnion, чтобы добавить в массив rules, не стирая старые
-            db.collection('memories').doc('global_context').update({
-              rules: admin.firestore.FieldValue.arrayUnion(newRule),
-              updatedAt: new Date().toISOString()
-            }).catch(err => console.error('Ошибка сохранения правила:', err));
+            // Простейшая защита от дублей в рамках сессии
+            // (В базе arrayUnion тоже защитит, но так мы не спамим запросами)
+            if (!conversationLog.includes(`[SAVED_RULE: ${newRule}]`)) {
+              console.log(`🎓 [TEACHER] Новое правило изучено: ${newRule}`);
+              conversationLog += ` [SAVED_RULE: ${newRule}]`; // Маркер, что мы это обработали
+
+              db.collection('memories').doc('global_context').update({
+                rules: admin.firestore.FieldValue.arrayUnion(newRule),
+                updatedAt: new Date().toISOString()
+              }).catch(err => console.error('Ошибка сохранения правила:', err));
+            }
           }
         }
       }

@@ -579,13 +579,12 @@ export default function App() {
   }, [stopAudio, status, setupScriptProcessorFallback]);
 
   const toggleMainAction = useCallback(() => {
-    if (isJunSpeaking) {
-      stopAudio();
-      playSFX('click');
-      return;
-    }
+    // [UX UPDATE] Single click now disconnects immediately (User Request)
+    // Removed the "Interrupt Only" step.
 
     if (status === ConnectionStatus.CONNECTED || status === ConnectionStatus.CONNECTING) {
+      stopAudio(); // Ensure audio stops instantly
+      playSFX('click');
       handleDisconnect();
     } else {
       // При первом клике инициируем знакомство
