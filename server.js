@@ -382,11 +382,21 @@ wss.on('connection', (clientWs, req) => {
         const currentDoc = await db.collection('memories').doc('global_context').get();
         const currentData = currentDoc.exists ? currentDoc.data() : { facts: [] };
 
-        // Поиск имени (меня зовут Имя, я — Имя, привет Джун это Имя)
-        const nameMatch = conversationLog.match(/меня зовут ([А-Яа-яЁёA-Za-z]+)/i) ||
-          conversationLog.match(/я ([А-Яа-яЁёA-Za-z]+)/i) ||
-          conversationLog.match(/это ([А-Яа-яЁёA-Za-z]+)/i);
-        const userName = nameMatch ? nameMatch[1] : (currentData.userName || null);
+        // Поиск имени (меня зовут Имя, я — Имя, называй меня Имя)
+        // Исключаем слово "голосом" и другие служебные слова
+        const nameMatch = conversationLog.match(/называй меня ([А-Яа-яЁё]+)/i) ||
+          conversationLog.match(/меня зовут ([А-Яа-яЁё]+)/i) ||
+          conversationLog.match(/я ([А-Яа-яЁё]+)/i) ||
+          conversationLog.match(/это ([А-Яа-яЁё]+)/i);
+
+        let userName = currentData.userName || null;
+        if (nameMatch) {
+          const candidate = nameMatch[1].toLowerCase();
+          const blacklist = ['голосом', 'напарник', 'джун', 'тебя', 'меня', 'привет', 'сейчас', 'тут'];
+          if (!blacklist.includes(candidate)) {
+            userName = nameMatch[1];
+          }
+        }
 
         await db.collection('memories').doc('global_context').set({
           summary: conversationLog.slice(-1500),

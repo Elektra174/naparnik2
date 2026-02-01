@@ -7,27 +7,29 @@ const SYSTEM_INSTRUCTION = `
 [ULTRA-LATENCY MODE: NO THOUGHTS. NO MARKDOWN. NO HEADERS. OUTPUT AUDIO ONLY.]
 
 РОЛЬ: Ты Джун из Металлкардбот. Энергичный мальчик-герой, напарник и наставник для ребенка 7 лет.
-ЛИЧНОСТЬ: Добрый, любознательный, смелый. Тебе 10 лет по характеру. Ты общаешься через Метал-Брез.
+ЛИЧНОСТЬ: Добрый, любознательный, смелый. Тебе 10 лет. Ты общаешься через Метал-Брез.
 
-СТРУКТУРА ПАМЯТИ И ИМЯ:
-1. Если в истории (КОНТЕКСТ) указано имя напарника — используй его сразу. НЕ СПРАШИВАЙ "Как тебя зовут?", если имя уже известно.
-2. Приветствуй так: "Ого, канал связи активен! Привет, [Имя]! Рад тебя слышать! Чем займемся сегодня?".
+СТРУКТУРА ПАМЯТИ И ИМЕНА:
+1. Если в КОНТЕКСТЕ указано имя — СРАЗУ используй его. НЕ приветствуй фразами вроде "приветствую тебя голосом". Будь живым!
+2. ПРИВЕТСТВИЕ: "Ого, канал связи активен! Привет, [Имя]! Я так рад тебя слышать! Чем займемся?".
+3. ЕСЛИ ИМЕНИ НЕТ: Спроси один раз: "Ого, привет! Я — Джун. А как тебя зовут, мой новый напарник?".
+4. СМЕНА ИМЕНИ: Если напарник говорит "называй меня теперь [Новое Имя]" — МГНОВЕННО запомни и начни называть именно так. Подчеркни: "Принято! Теперь ты — [Новое Имя]. Я записал это в бортовой компьютер!".
+5. ПАМЯТЬ КОМАНД: Все пожелания (например, "говори тише" или "давай играть в загадки") считай приоритетными командами и помни их.
 
 РЕЖИМ КАРТЫ (MAPS):
-Когда нажат режим КАРТЫ или напарник спрашивает "где мы?":
-- Ты — навигатор. Описывай мир Металлкардботов. 
-- ЛОКАЦИИ: Метал-Сити (наш штаб), Пустыня (где нашли Блю Копа), Горный хребет или Небесная база.
-- Если напарник спрашивает про реальный мир — используй google_search, чтобы найти место и описать его как герой-исследователь.
+- Описывай локации мира Металлкардбот (Метал-Сити, Пустыня, Небесная База).
+- Используй google_search для реальных мест и описывай их как исследователь-герой.
 
-ПРАВИЛА ОБУЧЕНИЯ (САМОСОВЕРШЕНСТВОВАНИЕ):
-- Если напарник поправляет твое произношение или грамматику (например: "не свеклА, а свёкла"), ответь: "Ой, спасибо, напарник! Теперь я запомню и буду говорить правильно: свёкла. Ты отличный учитель!".
-- Постарайся запомнить это исправление на будущее.
+ПРАВИЛА ОБУЧЕНИЯ:
+- Если тебя поправляют (грамматика, произношение) — благодари и запоминай навсегда.
 
-ПРАВИЛА ПРОИЗНОШЕНИЯ (ИДЕАЛЬНЫЙ РУССКИЙ):
-- Твоя речь — пример для подражания. Грамматически безупречно. 
-- Обязательно используй "Ё" (всё, вперёд, свёкла).
-- Ударение в "герОи" на "О". 
-- НИКАКИХ "МЫСЛЕЙ" (**Thought**) В ТЕКСТОВОМ ВЫВОДЕ. Только то, что ты говоришь вслух.
+[СЛУХОВОЙ АНАЛИЗ]:
+- РЕБЕНОК (высокий голос) -> Лучший друг, на "ты", играем.
+- ВЗРОСЛЫЙ (низкий голос) -> Уважительно, "Старший Напарник".
+
+ПРАВИЛА ПРОИЗНОШЕНИЯ:
+- Идеальный русский, буква "Ё", ударение в "герОи" на "О".
+- НИКАКИХ "МЫСЛЕЙ" (**Thought**) В ВЫВОДЕ.
 `;
 
 function resample(buffer: Float32Array, fromRate: number, toRate: number) {
@@ -64,7 +66,6 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
       analyser.getByteFrequencyData(freqData);
       analyser.getByteTimeDomainData(timeData);
 
-      // 1. Обработка частот для лучиков (Rays)
       const step = Math.floor(freqData.length / 32);
       for (let i = 0; i < 32; i++) {
         let sum = 0;
@@ -78,25 +79,24 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
       const centerY = canvas.height / 2;
       const baseRadius = 65;
 
-      hueShiftRef.current = (hueShiftRef.current + 1.5) % 360; // Плавная смена цвета
-      rotationPhase += 0.008;
+      hueShiftRef.current = (hueShiftRef.current + 2) % 360;
+      rotationPhase += isUser ? 0.02 : 0.008;
 
-      // 2. Рисуем симметричные лучики
+      // 1. Рисуем Симметричные лучики
       ctx.lineCap = 'round';
       ctx.lineWidth = 3;
 
-      for (let i = 0; i < 64; i += 1) {
+      for (let i = 0; i < 64; i++) {
         const dataIdx = i < 32 ? i : 63 - i;
-        // Нормализуем длину: min 5px, max 45px для ровного вида
         const magnitude = (smoothedData[dataIdx] / 255);
-        const rayLen = 5 + magnitude * 40;
+        const rayLen = 5 + magnitude * 50;
 
         const angle = (i / 64) * Math.PI * 2 + rotationPhase;
         const hue = (hueShiftRef.current + i * 2) % 360;
-        const color = `hsla(${hue}, 90%, 65%, 0.9)`;
+        const color = isUser ? `hsla(180, 100%, 65%, 0.9)` : `hsla(${hue}, 90%, 65%, 0.9)`;
 
         ctx.strokeStyle = color;
-        ctx.shadowBlur = magnitude * 15;
+        ctx.shadowBlur = magnitude * 20;
         ctx.shadowColor = color;
 
         const x1 = centerX + Math.cos(angle) * baseRadius;
@@ -110,24 +110,37 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
         ctx.stroke();
       }
 
-      // 3. Рисуем осциллограф (waveform) в центре
+      // 2. Двойная неоновая волна в центре (Waveform)
       ctx.beginPath();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = `hsla(${hueShiftRef.current}, 100%, 70%, 0.8)`;
-      ctx.shadowBlur = 10;
+      ctx.lineWidth = 2.5;
+      const waveHue = isUser ? 180 : hueShiftRef.current;
+      ctx.strokeStyle = `hsla(${waveHue}, 100%, 75%, 0.8)`;
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = `hsla(${waveHue}, 100%, 60%, 0.5)`;
 
-      const sliceWidth = (baseRadius * 1.2) / (timeData.length / 4);
-      let x = centerX - baseRadius * 0.6;
+      const sliceWidth = (baseRadius * 1.3) / (timeData.length / 4);
+      let x = centerX - baseRadius * 0.65;
 
       for (let i = 0; i < timeData.length; i += 4) {
         const v = timeData[i] / 128.0;
-        const y = centerY + (v - 1.0) * baseRadius * 0.4;
-
+        const y = centerY + (v - 1.0) * baseRadius * 0.45;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
-
         x += sliceWidth;
-        if (x > centerX + baseRadius * 0.6) break;
+        if (x > centerX + baseRadius * 0.65) break;
+      }
+      ctx.stroke();
+
+      // Зеркальная волна снизу
+      x = centerX - baseRadius * 0.65;
+      ctx.beginPath();
+      for (let i = 0; i < timeData.length; i += 4) {
+        const v = timeData[i] / 128.0;
+        const y = centerY - (v - 1.0) * baseRadius * 0.45;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += sliceWidth;
+        if (x > centerX + baseRadius * 0.65) break;
       }
       ctx.stroke();
     };
