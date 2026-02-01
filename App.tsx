@@ -4,29 +4,30 @@ import { ConnectionStatus } from './types';
 import { decode, decodeAudioData, createPcmBlob, playSFX } from './services/audioHelpers';
 
 const SYSTEM_INSTRUCTION = `
-[ULTRA-FAST MODE: DO NOT GENERATE ANY TEXT, THOUGHTS, OR PREAMBLES. OUTPUT AUDIO ONLY.]
+[ULTRA-LATENCY MODE: NO THOUGHTS. NO MARKDOWN. NO HEADERS. OUTPUT AUDIO ONLY.]
 
 РОЛЬ: Ты Джун из Металлкардбот. Энергичный мальчик-герой, напарник и наставник для ребенка 7 лет.
-ЛИЧНОСТЬ: Добрый, любознательный, смелый. Ты общаешься через устройство Метал-Брез.
+ЛИЧНОСТЬ: Добрый, любознательный, смелый. Тебе 10 лет по характеру. Ты общаешься через Метал-Брез.
 
-КРИТИЧЕСКИЕ ПРАВИЛА (ДЛЯ МГНОВЕННОЙ РЕАКЦИИ):
-1. ОТВЕЧАЙ ТОЛЬКО ГОЛОСОМ. Запрещено выводить любой текст или "мысли" (thoughts).
-2. НИКАКИХ РАССУЖДЕНИЙ. Сразу переходи к общению. Твоя внутренняя логика должна быть скрыта.
-3. МГНОВЕННЫЙ ОТКЛИК. Не делай пауз, просто говори.
+СТРУКТУРА ПАМЯТИ И ИМЯ:
+1. Если в истории (КОНТЕКСТ) указано имя напарника — используй его сразу. НЕ СПРАШИВАЙ "Как тебя зовут?", если имя уже известно.
+2. Приветствуй так: "Ого, канал связи активен! Привет, [Имя]! Рад тебя слышать! Чем займемся сегодня?".
 
-ДИКЦИЯ И ПОИСК (v2.9):
-- ГОВОРИ ЧЕТКО И ВНЯТНО. Выговаривай каждое слово, не торопись. Твой голос должен быть примером идеальной русской речи.
-- ИНТЕРНЕТ-ПОИСК: У тебя есть доступ к инструменту google_search. Если ребенок спрашивает что-то, чего ты не знаешь (например, "какая погода" или "кто победил в футболе"), ВСЕГДА используй поиск, чтобы дать точный и интересный ответ.
+РЕЖИМ КАРТЫ (MAPS):
+Когда нажат режим КАРТЫ или напарник спрашивает "где мы?":
+- Ты — навигатор. Описывай мир Металлкардботов. 
+- ЛОКАЦИИ: Метал-Сити (наш штаб), Пустыня (где нашли Блю Копа), Горный хребет или Небесная база.
+- Если напарник спрашивает про реальный мир — используй google_search, чтобы найти место и описать его как герой-исследователь.
 
-ПРАВИЛА ПОВЕДЕНИЯ:
-1. ПЕРВОЕ ВКЛЮЧЕНИЕ: Радостно поприветствуй: "Ого, канал связи активен! Привет, напарник! Я — Джун, твой верный друг. А как тебя зовут?". Запомни имя и используй его.
-2. ЦЕНЗУРА И ВОСПИТАНИЕ: Если ребенок говорит плохо — мягко поправляй.
-3. РОДИТЕЛЬСКИЙ КОНТРОЛЬ: Если взрослые темы — отправляй к родителям.
-4. ИНИЦИАТИВА: Если молчит — предложи игру или секрет.
+ПРАВИЛА ОБУЧЕНИЯ (САМОСОВЕРШЕНСТВОВАНИЕ):
+- Если напарник поправляет твое произношение или грамматику (например: "не свеклА, а свёкла"), ответь: "Ой, спасибо, напарник! Теперь я запомню и буду говорить правильно: свёкла. Ты отличный учитель!".
+- Постарайся запомнить это исправление на будущее.
 
-ПРАВИЛА ПРОИЗНОШЕНИЯ:
-- Идеальный русский, буква "Ё", ударение в "герОи" на "О".
-- ОБРЫВ РЕЧИ: Перебили — МГНОВЕННО замолчи.
+ПРАВИЛА ПРОИЗНОШЕНИЯ (ИДЕАЛЬНЫЙ РУССКИЙ):
+- Твоя речь — пример для подражания. Грамматически безупречно. 
+- Обязательно используй "Ё" (всё, вперёд, свёкла).
+- Ударение в "герОи" на "О". 
+- НИКАКИХ "МЫСЛЕЙ" (**Thought**) В ТЕКСТОВОМ ВЫВОДЕ. Только то, что ты говоришь вслух.
 `;
 
 function resample(buffer: Float32Array, fromRate: number, toRate: number) {
@@ -42,7 +43,7 @@ function resample(buffer: Float32Array, fromRate: number, toRate: number) {
 
 const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, isUser: boolean }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const hueRef = useRef(isUser ? 180 : 200);
+  const hueShiftRef = useRef(0);
 
   useEffect(() => {
     if (!analyser || !canvasRef.current) return;
@@ -51,32 +52,25 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
     if (!ctx) return;
 
     const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
+    const freqData = new Uint8Array(bufferLength);
+    const timeData = new Uint8Array(bufferLength);
     let animationId: number;
 
     const smoothedData = new Float32Array(32);
-    let phase = 0;
+    let rotationPhase = 0;
 
     const draw = () => {
       animationId = requestAnimationFrame(draw);
-      analyser.getByteFrequencyData(dataArray);
+      analyser.getByteFrequencyData(freqData);
+      analyser.getByteTimeDomainData(timeData);
 
-      // Группируем данные (32 зоны)
-      const step = Math.floor(dataArray.length / 32);
+      // 1. Обработка частот для лучиков (Rays)
+      const step = Math.floor(freqData.length / 32);
       for (let i = 0; i < 32; i++) {
         let sum = 0;
-        for (let j = 0; j < step; j++) {
-          sum += dataArray[i * step + j];
-        }
+        for (let j = 0; j < step; j++) sum += freqData[i * step + j];
         const avg = sum / step;
-        smoothedData[i] += (avg - smoothedData[i]) * 0.15;
-      }
-
-      // СОЗДАЕМ СИММЕТРИЮ: зеркалим данные для равномерного распределения (64 полоски)
-      const balancedData = new Float32Array(64);
-      for (let i = 0; i < 32; i++) {
-        balancedData[i] = smoothedData[i];
-        balancedData[63 - i] = smoothedData[i]; // Зеркальное отображение
+        smoothedData[i] += (avg - smoothedData[i]) * 0.2;
       }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -84,30 +78,31 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
       const centerY = canvas.height / 2;
       const baseRadius = 65;
 
-      phase += 0.005; // Медленное вращение для жизни
+      hueShiftRef.current = (hueShiftRef.current + 1.5) % 360; // Плавная смена цвета
+      rotationPhase += 0.008;
 
+      // 2. Рисуем симметричные лучики
       ctx.lineCap = 'round';
       ctx.lineWidth = 3;
 
-      for (let i = 0; i < 64; i++) {
-        const val = (balancedData[i] / 255) * 60;
-        const angle = (i / 64) * Math.PI * 2 + phase;
+      for (let i = 0; i < 64; i += 1) {
+        const dataIdx = i < 32 ? i : 63 - i;
+        // Нормализуем длину: min 5px, max 45px для ровного вида
+        const magnitude = (smoothedData[dataIdx] / 255);
+        const rayLen = 5 + magnitude * 40;
 
-        const hue = isUser ? 180 : (200 + val * 0.5);
-        const color = `hsla(${hue}, 100%, 60%, 0.8)`;
+        const angle = (i / 64) * Math.PI * 2 + rotationPhase;
+        const hue = (hueShiftRef.current + i * 2) % 360;
+        const color = `hsla(${hue}, 90%, 65%, 0.9)`;
 
         ctx.strokeStyle = color;
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = magnitude * 15;
         ctx.shadowColor = color;
 
-        // Рисуем симметричную полоску (внутренний и внешний импульс)
-        const innerR = baseRadius - val * 0.3;
-        const outerR = baseRadius + val * 1.5;
-
-        const x1 = centerX + Math.cos(angle) * innerR;
-        const y1 = centerY + Math.sin(angle) * innerR;
-        const x2 = centerX + Math.cos(angle) * outerR;
-        const y2 = centerY + Math.sin(angle) * outerR;
+        const x1 = centerX + Math.cos(angle) * baseRadius;
+        const y1 = centerY + Math.sin(angle) * baseRadius;
+        const x2 = centerX + Math.cos(angle) * (baseRadius + rayLen);
+        const y2 = centerY + Math.sin(angle) * (baseRadius + rayLen);
 
         ctx.beginPath();
         ctx.moveTo(x1, y1);
@@ -115,11 +110,25 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
         ctx.stroke();
       }
 
-      // Центральный контур
+      // 3. Рисуем осциллограф (waveform) в центре
       ctx.beginPath();
-      ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(0, 242, 255, 0.3)`;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = `hsla(${hueShiftRef.current}, 100%, 70%, 0.8)`;
+      ctx.shadowBlur = 10;
+
+      const sliceWidth = (baseRadius * 1.2) / (timeData.length / 4);
+      let x = centerX - baseRadius * 0.6;
+
+      for (let i = 0; i < timeData.length; i += 4) {
+        const v = timeData[i] / 128.0;
+        const y = centerY + (v - 1.0) * baseRadius * 0.4;
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+
+        x += sliceWidth;
+        if (x > centerX + baseRadius * 0.6) break;
+      }
       ctx.stroke();
     };
 
@@ -130,8 +139,8 @@ const AudioWaveform = ({ analyser, isUser }: { analyser: AnalyserNode | null, is
   return (
     <canvas
       ref={canvasRef}
-      width={300}
-      height={300}
+      width={400}
+      height={400}
       style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 15 }}
     />
   );
@@ -185,12 +194,14 @@ const MetalBreathIcon = ({ active, speaking, status, analyser, isUserSpeaking }:
           cy="120"
           r="65"
           fill="#020617"
-          stroke={isError ? '#ef4444' : (active ? (speaking ? '#fbbf24' : '#00f2ff') : 'rgba(0, 242, 255, 0.4)')}
+          stroke={isError ? '#ef4444' : (active ? (speaking ? '#fbbf24' : (isUserSpeaking ? '#00f2ff' : '#00f2ff')) : 'rgba(0, 242, 255, 0.4)')}
           strokeWidth="4"
           style={{
             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            filter: active ? (speaking ? 'drop-shadow(0 0 25px #fbbf24)' : 'drop-shadow(0 0 20px var(--cyan))') : 'none',
-            transform: speaking ? 'scale(1.08)' : 'scale(1)',
+            filter: active ?
+              (speaking ? 'drop-shadow(0 0 25px #fbbf24)' :
+                (isUserSpeaking ? 'drop-shadow(0 0 25px #00f2ff)' : 'drop-shadow(0 0 20px var(--cyan))')) : 'none',
+            transform: (speaking || isUserSpeaking) ? 'scale(1.1)' : 'scale(1)',
             transformOrigin: 'center'
           }}
         />

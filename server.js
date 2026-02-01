@@ -171,14 +171,26 @@ wss.on('connection', (clientWs, req) => {
       try {
         const doc = await db.collection('memories').doc('global_context').get();
         if (doc.exists) {
-          const context = doc.data().summary;
+          const data = doc.data();
+          const context = data.summary || "";
+          const userName = data.userName || "";
+          const facts = data.facts?.join(', ') || "";
+
           console.log('🧠 Память успешно восстановлена.');
-          return `\nКОНТЕКСТ ПРОШЛЫХ ВСТРЕЧ: ${context}`;
+
+          let memoryInstruction = `\nКОНТЕКСТ ПРОШЛЫХ ВСТРЕЧ: ${context}`;
+          if (userName) {
+            memoryInstruction += `\nТВОЕГО НАПАРНИКА ЗОВУТ: ${userName}. ОБРАЩАЙСЯ К НЕМУ ПО ИМЕНИ. НЕ СПРАШИВАЙ ИМЯ ПОВТОРНО.`;
+          }
+          if (facts) {
+            memoryInstruction += `\nТЫ ТАКЖЕ ЗНАЕШЬ СЛЕДУЮЩЕЕ: ${facts}`;
+          }
+          return memoryInstruction;
         }
       } catch (e) {
         // Не логируем ошибку 5 (NOT_FOUND) — это нормально для первого запуска
-        if (!e.message.includes('5 NOT_FOUND')) {
-          console.error('Ошибка восстановления памяти:', e.message);
+        if (!e.message && !e.toString().includes('5 NOT_FOUND')) {
+          console.error('Ошибка восстановления памяти:', e.message || e);
         }
       }
     }
@@ -293,9 +305,14 @@ wss.on('connection', (clientWs, req) => {
         console.log('🤖 Ответ от Gemini:', JSON.stringify(resp, null, 2));
       }
 
-      // Логируем текстовые сообщения от Джуна для суммаризации
+      // Логируем текстовые сообщения от Джуна для суммаризации (фильтруем "мысли" и markdown)
       if (resp.serverContent?.modelTurn?.parts?.[0]?.text) {
-        conversationLog += `\nДжун: ${resp.serverContent.modelTurn.parts[0].text}`;
+        let text = resp.serverContent.modelTurn.parts[0].text;
+        // Убираем маркдаун и внутренние мысли, если они пролезли в текст
+        text = text.replace(/\*\*.*?\*\*/g, '').replace(/\[.*?\]/g, '').trim();
+        if (text && !resp.serverContent.modelTurn.parts[0].thought) {
+          conversationLog += `\nДжун: ${text}`;
+        }
       }
 
     } catch (e) {
@@ -359,14 +376,25 @@ wss.on('connection', (clientWs, req) => {
     clearInterval(pingInterval);
     console.log('📱 Напарник вышел из эфира. Сохраняем память...');
 
-    // Авто-суммаризация при отключении (v4.0)
-    if (db && conversationLog.length > 50) {
+    // Авто-суммаризация и извлечение имени при отключении (v5.0)
+    if (db && conversationLog.length > 20) {
       try {
+        const currentDoc = await db.collection('memories').doc('global_context').get();
+        const currentData = currentDoc.exists ? currentDoc.data() : { facts: [] };
+
+        // Поиск имени (меня зовут Имя, я — Имя, привет Джун это Имя)
+        const nameMatch = conversationLog.match(/меня зовут ([А-Яа-яЁёA-Za-z]+)/i) ||
+          conversationLog.match(/я ([А-Яа-яЁёA-Za-z]+)/i) ||
+          conversationLog.match(/это ([А-Яа-яЁёA-Za-z]+)/i);
+        const userName = nameMatch ? nameMatch[1] : (currentData.userName || null);
+
         await db.collection('memories').doc('global_context').set({
-          summary: conversationLog.slice(-1000), // Сохраняем хвост диалога как рабочий контекст
+          summary: conversationLog.slice(-1500),
+          userName: userName,
           updatedAt: new Date().toISOString()
-        });
-        console.log('💾 Память успешно сохранена в Firebase!');
+        }, { merge: true });
+
+        console.log('💾 Память (v5.0) структурирована и сохранена!');
       } catch (e) { console.error('Ошибка сохранения памяти:', e); }
     }
 
