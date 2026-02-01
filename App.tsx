@@ -399,7 +399,6 @@ export default function App() {
             model: "models/gemini-2.5-flash-native-audio-preview-12-2025",
             generationConfig: {
               responseModalities: ["AUDIO"],
-              outputAudioTranscription: {}, // [CRITICAL] Enables server to "hear" Jun's text for memory saving
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: {
@@ -408,6 +407,8 @@ export default function App() {
                 }
               }
             },
+            // [CRITICAL] Enables server to "hear" Jun's text for memory saving
+            outputAudioTranscription: {},
             tools: [{ googleSearch: {} }],
             // [SESSION FIX] Enable Context Compression to allow 15min+ sessions
             // This prevents "Token Limit" disconnects by summarizing old context.
