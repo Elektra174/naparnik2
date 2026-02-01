@@ -185,6 +185,12 @@ wss.on('connection', (clientWs, req) => {
           if (facts) {
             memoryInstruction += `\nТЫ ТАКЖЕ ЗНАЕШЬ СЛЕДУЮЩЕЕ: ${facts}`;
           }
+
+          const rules = data.rules;
+          if (rules && Array.isArray(rules) && rules.length > 0) {
+            memoryInstruction += `\n\n[ВАЖНЫЕ ПРАВИЛА И ПОПРАВКИ ОТ НАПАРНИКА]:\n- ${rules.join('\n- ')}\nСОБЛЮДАЙ ЭТИ ПРАВИЛА ВСЕГДА.`;
+          }
+
           return memoryInstruction;
         }
       } catch (e) {
@@ -318,6 +324,30 @@ wss.on('connection', (clientWs, req) => {
         if (text && !parts[0].thought) {
           conversationLog += `\nДжун: ${text}`;
           console.log(`📝 Записано в память: "${text.substring(0, 50)}..."`);
+
+          // [REAL-TIME MEMORY] Мгновенное сохранение имени при обнаружении подтверждения
+          const nameConfirmMatch = text.match(/Твое имя записано:\s*([А-Яа-яЁёA-Za-z]+)/i);
+          if (nameConfirmMatch && db) {
+            const detectedName = nameConfirmMatch[1];
+            console.log(`⚡ [REAL-TIME] Мгновенная запись имени в базу: ${detectedName}`);
+            db.collection('memories').doc('global_context').set({
+              userName: detectedName,
+              updatedAt: new Date().toISOString()
+            }, { merge: true }).catch(err => console.error('Ошибка мгновенного сохранения:', err));
+          }
+
+          // [SELF-CORRECTION] Мгновенное сохранение поправок
+          // Ищем: "Запомнил поправку: [текст]"
+          const correctionMatch = text.match(/Запомнил поправку:\s*(.+)/i);
+          if (correctionMatch && db) {
+            const newRule = correctionMatch[1].trim();
+            console.log(`🎓 [TEACHER] Новое правило изучено: ${newRule}`);
+            // Используем arrayUnion, чтобы добавить в массив rules, не стирая старые
+            db.collection('memories').doc('global_context').update({
+              rules: admin.firestore.FieldValue.arrayUnion(newRule),
+              updatedAt: new Date().toISOString()
+            }).catch(err => console.error('Ошибка сохранения правила:', err));
+          }
         }
       }
 
