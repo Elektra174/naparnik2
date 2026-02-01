@@ -417,11 +417,20 @@ wss.on('connection', (clientWs, req) => {
 
     } catch (e) { }
 
-    // Настройки шлем сразу, остальное - после SetupComplete
-    if (isGeminiReady && (isSetup || (setupReceived && !isFlushing))) {
-      if (geminiWs.readyState === WebSocket.OPEN) {
+    // Пересылаем сообщения на Gemini
+    if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+      // Setup messages go immediately
+      if (isSetup) {
         geminiWs.send(data);
-        if (isSetup) console.log('⚙️ [v2.0] Отправлены настройки (Setup)');
+        console.log('⚙️ [v4.3] Config sent (Setup)');
+      }
+      // Other messages (including audio) go after setup is received
+      else if (setupReceived && !isFlushing) {
+        geminiWs.send(data);
+      }
+      // Queue if setup not received yet
+      else if (!setupReceived) {
+        messageQueue.push(data);
       }
     } else {
       messageQueue.push(data);
