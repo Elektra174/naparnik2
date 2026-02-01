@@ -306,12 +306,18 @@ wss.on('connection', (clientWs, req) => {
       }
 
       // Логируем текстовые сообщения от Джуна для суммаризации (фильтруем "мысли" и markdown)
-      if (resp.serverContent?.modelTurn?.parts?.[0]?.text) {
-        let text = resp.serverContent.modelTurn.parts[0].text;
+      const serverContent = resp.serverContent || resp.server_content;
+      const modelTurn = serverContent?.modelTurn || serverContent?.model_turn;
+      const parts = modelTurn?.parts;
+      const textPart = parts?.[0]?.text;
+
+      if (textPart) {
+        let text = textPart;
         // Убираем маркдаун и внутренние мысли, если они пролезли в текст
         text = text.replace(/\*\*.*?\*\*/g, '').replace(/\[.*?\]/g, '').trim();
-        if (text && !resp.serverContent.modelTurn.parts[0].thought) {
+        if (text && !parts[0].thought) {
           conversationLog += `\nДжун: ${text}`;
+          console.log(`📝 Записано в память: "${text.substring(0, 50)}..."`);
         }
       }
 
@@ -382,19 +388,21 @@ wss.on('connection', (clientWs, req) => {
         const currentDoc = await db.collection('memories').doc('global_context').get();
         const currentData = currentDoc.exists ? currentDoc.data() : { facts: [] };
 
-        // Поиск имени (меня зовут Имя, я — Имя, называй меня Имя)
-        // Исключаем слово "голосом" и другие служебные слова
-        const nameMatch = conversationLog.match(/называй меня ([А-Яа-яЁё]+)/i) ||
-          conversationLog.match(/меня зовут ([А-Яа-яЁё]+)/i) ||
-          conversationLog.match(/я ([А-Яа-яЁё]+)/i) ||
-          conversationLog.match(/это ([А-Яа-яЁё]+)/i);
+        // Поиск имени (v6.0 Strategy: Capture from Jun's confirmation or User's command)
+        // 1. Ищем подтверждение от Джуна: "Твое имя записано: Имя"
+        // 2. Ищем команду от юзера: "называй меня Имя"
+        const nameMatch = conversationLog.match(/Твое имя записано:\s*([А-Яа-яЁёA-Za-z]+)/i) ||
+          conversationLog.match(/называй меня\s*([А-Яа-яЁёA-Za-z]+)/i) ||
+          conversationLog.match(/мое имя\s*([А-Яа-яЁёA-Za-z]+)/i);
 
         let userName = currentData.userName || null;
         if (nameMatch) {
           const candidate = nameMatch[1].toLowerCase();
-          const blacklist = ['голосом', 'напарник', 'джун', 'тебя', 'меня', 'привет', 'сейчас', 'тут'];
-          if (!blacklist.includes(candidate)) {
+          const blacklist = ['голосом', 'напарник', 'джун', 'тебя', 'меня', 'привет', 'сейчас', 'тут', 'мой', 'твой'];
+          // Имя должно быть длиннее 2 символов и не в черном списке
+          if (!blacklist.includes(candidate) && candidate.length > 2) {
             userName = nameMatch[1];
+            console.log(`🧠 [MEMORY] Обнаружено новое имя: ${userName}`);
           }
         }
 
