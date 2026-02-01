@@ -496,6 +496,11 @@ export default function App() {
                 }
                 const rms = Math.sqrt(sum / audioData.length);
 
+                // [DEBUG] Log audio activity
+                if (rms > 0.02) {
+                  console.log('🎤 Микрофон активен! RMS:', rms.toFixed(4));
+                }
+
                 // Threshold 0.02 avoids background noise triggering ripples
                 if (rms > 0.02) {
                   setUserIsSpeaking(true);
@@ -504,6 +509,9 @@ export default function App() {
 
                 const downsampled = resample(audioData, inputRate, 16000);
                 const pcmBlob = createPcmBlob(downsampled);
+
+                // [DEBUG] Log audio transmission
+                console.log('📤 Отправка аудио на сервер, размер:', pcmBlob.data.length, 'байт');
 
                 socket.send(JSON.stringify({
                   realtimeInput: {

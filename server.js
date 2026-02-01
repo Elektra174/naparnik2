@@ -400,6 +400,12 @@ wss.on('connection', (clientWs, req) => {
       // Логируем текстовые сообщения для суммаризации
       try {
         const json = JSON.parse(msgStr);
+
+        // [DEBUG] Log incoming audio data
+        if (json.realtimeInput?.mediaChunks) {
+          console.log('🎤 [SERVER] Получено аудио от клиента, chunks:', json.realtimeInput.mediaChunks.length);
+        }
+
         if (json.clientContent?.turns?.[0]?.parts?.[0]?.text) {
           const userText = json.clientContent.turns[0].parts[0].text;
           // [FILTER] Не логируем системные триггеры
