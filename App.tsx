@@ -219,6 +219,13 @@ const MetalBreathIcon = ({ active, speaking, status, analyser, isUserSpeaking }:
           }}
         />
 
+        {active && isUserSpeaking && (
+          <>
+            <circle cx="120" cy="120" r="65" fill="none" stroke="#00f2ff" strokeWidth="2" className="animate-sonic-ripple-1" />
+            <circle cx="120" cy="120" r="65" fill="none" stroke="#00f2ff" strokeWidth="2" className="animate-sonic-ripple-2" />
+          </>
+        )}
+
         {active && (
           <circle
             cx="120"
@@ -465,6 +472,20 @@ export default function App() {
             workletNode.port.onmessage = (e) => {
               if (socket.readyState === WebSocket.OPEN) {
                 const audioData = e.data.audioData;
+
+                // [CLIENT-SIDE VAD] Calculate volume for instant visual feedback
+                let sum = 0;
+                for (let i = 0; i < audioData.length; i++) {
+                  sum += audioData[i] * audioData[i];
+                }
+                const rms = Math.sqrt(sum / audioData.length);
+
+                // Threshold 0.02 avoids background noise triggering ripples
+                if (rms > 0.02) {
+                  setUserIsSpeaking(true);
+                  // Optional: Reset timer if we wanted auto-silence, but we rely on turnTurnComplete for now
+                }
+
                 const downsampled = resample(audioData, inputRate, 16000);
                 const pcmBlob = createPcmBlob(downsampled);
 
@@ -592,6 +613,14 @@ export default function App() {
 
   return (
     <div id="root" style={{ background: 'transparent', height: '100dvh', display: 'flex', flexDirection: 'column' }}>
+      <style>{`
+        @keyframes sonic-ripple {
+          0% { r: 65; opacity: 1; stroke-width: 3px; }
+          100% { r: 100; opacity: 0; stroke-width: 0px; }
+        }
+        .animate-sonic-ripple-1 { animation: sonic-ripple 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite; }
+        .animate-sonic-ripple-2 { animation: sonic-ripple 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite 0.5s; }
+      `}</style>
       <header style={{
         height: '65px',
         display: 'flex',
