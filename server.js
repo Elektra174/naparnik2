@@ -243,7 +243,8 @@ wss.on('connection', (clientWs, req) => {
       if (textPart) {
         let text = textPart;
         text = text.replace(/\*\*.*?\*\*/g, '').replace(/\[.*?\]/g, '').trim();
-        if (text && !parts[0].thought) {
+        // Fixed: parts[0] might not exist for transcripts, use optional chaining
+        if (text && !parts?.[0]?.thought) {
           conversationLog += `\nДжун: ${text}`;
           console.log(`📝 Записано в память: "${text.substring(0, 50)}..."`);
 
