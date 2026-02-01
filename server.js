@@ -127,10 +127,28 @@ wss.on('connection', (clientWs, req) => {
     return;
   }
 
+  // Получаем настройки прокси из переменных окружения
+  const proxyHost = process.env.PROXY_HOST;
+  const proxyPort = process.env.PROXY_PORT;
+  const proxyUser = process.env.PROXY_USER;
+  const proxyPass = process.env.PROXY_PASS;
+
+  // Создаем прокси агента только если заданы хост и порт
+  let agent = null;
+  if (proxyHost && proxyPort) {
+    const proxyUrl = `http://${proxyUser}:${proxyPass}@${proxyHost}:${proxyPort}`;
+    agent = new HttpsProxyAgent(proxyUrl);
+    console.log('🌐 Используется прокси:', proxyHost + ':' + proxyPort);
+  } else {
+    console.log('🌐 Прокси не настроен, прямое подключение');
+  }
+
   // [SESSION PERSISTENCE] Reconnection Logic
   let geminiWs = null;
   let cachedSetupMessage = null;
   let isReconnecting = false;
+  let isGeminiReady = false;
+  const messageQueue = [];
 
   const connectToGemini = () => {
     const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
